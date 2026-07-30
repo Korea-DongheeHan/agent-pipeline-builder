@@ -390,10 +390,17 @@ def compile_workflow(wf, mark_join_any):
                                            SUCCEEDED|FAILED|ALWAYS (STATUS 분기).
                                            케이스 값 = 노드 | 시퀀스. 분기 다음
                                            스텝은 자동으로 join: any (합류점)
+      - if: <조건> / goto: <대상>           직전 노드의 상태·출력 체크 후 점프.
+                                           조건: FAILED | route == heavy 등.
+                                           위(이미 나온 노드)로 goto = 피드백 루프
+                                           (max 기본 3, exhausted 지정 가능),
+                                           아래/측면/END/FAIL 로 goto = 조건 분기.
+                                           if 생략 = 무조건 점프(시퀀스 종료)
 
     START/END 는 자동 연결된다 (첫 스텝 앞 START, 마지막 exits 뒤 END).
     """
     edges = []
+    placed = set()  # 지금까지 배치된 노드 — goto 의 루프(뒤로)/분기(앞으로) 판정
 
     def connect(srcs, dsts, when=None, loop=None):
         for s in srcs:
@@ -413,6 +420,7 @@ def compile_workflow(wf, mark_join_any):
                 return [s], []
             if merge_point:
                 mark_join_any(s)
+            placed.add(s)
             return [s], [s]
         if not isinstance(step, dict) or len(step) != 1:
             raise PipelineError("workflow 스텝 형식 오류: %r" % step)
@@ -462,7 +470,41 @@ def compile_workflow(wf, mark_join_any):
         """스텝 시퀀스 → (첫 스텝 entries, 마지막 exits). prev_exits 와 자동 연결."""
         first_entries = None
         merge_next = merge_first
+        pending_neg = []  # 직전 if/goto(OUTPUT 조건)의 부정 — 다음 스텝 엣지에 주입해 배타 보장
         for step in _as_list(steps):
+            if isinstance(step, dict) and "goto" in step:
+                if not prev_exits or len(prev_exits) != 1 or prev_exits[0] == START:
+                    raise PipelineError("if/goto 는 단일 선행 노드 바로 뒤에만 올 수 있다")
+                src = prev_exits[0]
+                cond = step.get("if", "ALWAYS")
+                targets = [str(t) for t in _as_list(step["goto"])]
+                backward = any(t in placed for t in targets)
+                loop_cfg = None
+                if backward or "max" in step:
+                    exh = step.get("exhausted", "FAIL")
+                    if isinstance(exh, list):
+                        x_en, _ = compile_seq(exh, None, False)
+                        exh = x_en[0]
+                    loop_cfg = {"max": int(step.get("max", 3)), "on_exhausted": str(exh)}
+                else:
+                    for t in targets:  # 앞으로 점프 = 분기 합류 가능성 → join: any
+                        if t not in (END, FAIL):
+                            mark_join_any(t)
+                connect([src], targets, when=cond, loop=loop_cfg)
+                if "if" not in step:
+                    prev_exits = []  # 무조건 점프 — 순차 흐름은 여기서 끊긴다
+                else:
+                    for c in _normalize_when(cond):
+                        if c["type"] == "OUTPUT" and "equals" in c:
+                            pending_neg.append(
+                                {"type": "OUTPUT", "key": c["key"], "not_equals": c["equals"]}
+                            )
+                        elif c["type"] == "OUTPUT" and "not_equals" in c:
+                            pending_neg.append(
+                                {"type": "OUTPUT", "key": c["key"], "equals": c["not_equals"]}
+                            )
+                        # STATUS FAILED 는 기본 성공 엣지와 이미 배타, in 은 자동 배타 미지원
+                continue
             if isinstance(step, dict) and len(step) == 1 and next(iter(step)) == "branch":
                 spec = step["branch"] or {}
                 if not prev_exits or len(prev_exits) != 1 or prev_exits[0] == START:
@@ -496,7 +538,8 @@ def compile_workflow(wf, mark_join_any):
             if first_entries is None:
                 first_entries = en
             if prev_exits:
-                connect(prev_exits, en)
+                connect(prev_exits, en, when=(["SUCCEEDED"] + pending_neg) if pending_neg else None)
+            pending_neg = []
             prev_exits = ex
             merge_next = False
         return first_entries or [], prev_exits or []

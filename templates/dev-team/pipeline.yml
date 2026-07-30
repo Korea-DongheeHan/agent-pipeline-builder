@@ -1,4 +1,7 @@
-# development 팀 템플릿: 설계 → (병렬 구현) → 테스트 → 리뷰 + 피드백 루프
+# 기본 파이프라인 템플릿: 설계 → (병렬 구현) → 테스트 → 리뷰 + 피드백 루프
+# 이 하나의 구성으로 개발 팀·배치 워크플로우 모두 자유롭게 변형한다.
+#   - 순차 체인만 필요하면 workflow 에 노드를 나열만 하면 된다
+#   - 값 기반 다중 분기는 branch 블록, 상태 체크 점프는 if/goto (references/yml-spec.md)
 # 실행: python3 scripts/run_graph.py pipeline.yml --var requirement="요구사항"
 name: dev-team
 kind: development
@@ -25,12 +28,16 @@ nodes:
     prompt: prompts/review.md
 
 # 워크플로우는 위에서 아래로 읽는다. START/END 는 자동 연결.
+# if/goto: 직전 노드의 상태를 체크해 점프한다. 이미 나온 노드로의 goto 는
+# 자동으로 피드백 루프가 된다 (max 초과 시 exhausted 경로, 기본 FAIL).
 workflow:
   - architect
-  - loop:                              # test/review 실패 → 구현 재작업 (최대 3회)
-      max: 3
-      redo: [impl-core, impl-api]      # 실패 시 재실행할 노드
-      body:
-        - parallel: [impl-core, impl-api]   # Fan-Out — 다음 스텝(test)에서 Fan-In
-        - test
-        - review
+  - parallel: [impl-core, impl-api]   # Fan-Out — 다음 스텝(test)에서 Fan-In
+  - test
+  - if: FAILED                        # 테스트 실패 → 구현 재작업 루프
+    goto: [impl-core, impl-api]
+    max: 3
+  - review
+  - if: FAILED                        # 리뷰 REQUEST_CHANGES → 재작업 루프
+    goto: [impl-core, impl-api]
+    max: 3

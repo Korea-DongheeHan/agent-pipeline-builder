@@ -24,16 +24,14 @@ edges: [ ... ]           # 저수준 — 엣지 직접 정의 (workflow 와 병�
 ```yaml
 workflow:
   - analyst                            # 문자열 = 노드 순차 실행 (선행 SUCCEEDED 시)
-  - loop:                              # 피드백 루프 블록
-      max: 2                           # 판정별 최대 재작업 횟수
-      exhausted: [escalate, FAIL]      # 소진 시 경로: FAIL(기본) | 노드 | 시퀀스
-      redo: implement                  # 실패 시 재실행 노드(리스트 가능).
-                                       # 생략 시 body 첫 노드
-      body:
-        - parallel: [implement, test]  # Fan-Out. 항목 = 노드 | 시퀀스 | 중첩 블록
-        - qa                           # Fan-In — 병렬 갈래가 모두 끝나야 실행
-        - review
-  - branch:                            # 조건 분기 블록 (단일 선행 노드 뒤에만)
+  - parallel: [implement, test]        # Fan-Out. 항목 = 노드 | 시퀀스 | 중첩 블록
+  - qa                                 # Fan-In — 병렬 갈래가 모두 끝나야 실행
+  - if: FAILED                         # 직전 노드(qa) 상태·출력 체크 후 점프
+    goto: implement                    # 이미 나온 노드로 = 피드백 루프 (자동 판정)
+    max: 2                             # 루프 상한 (뒤로 goto 기본 3)
+    exhausted: [escalate, FAIL]        # 소진 시 경로: FAIL(기본) | 노드 | 시퀀스
+  - review
+  - branch:                            # 다중 케이스 분기 (단일 선행 노드 뒤에만)
       on: route                        # GRAPH_OUTPUT 키. 생략 시 케이스 키가
       cases:                           # SUCCEEDED|FAILED|ALWAYS (STATUS 분기)
         heavy: process-heavy           # 케이스 값 = 노드 | 시퀀스 (END/FAIL 터미널 허용)
@@ -46,13 +44,33 @@ workflow:
 - **순차**: 리스트 순서대로. 각 연결의 기본 조건은 선행 SUCCEEDED.
 - **parallel**: 갈래를 동시에 실행. 다음 스텝은 모든 갈래 완료를 기다린다
   (join: all). 갈래 안에 시퀀스·중첩 블록을 넣을 수 있다.
-- **loop**: `body` 안에서 **redo 스텝 이후의 노드가 FAILED** 를 보고하면
-  redo 노드로 피드백(재작업)한다. redo 스텝 이전(포함) 노드의 FAILED 는
-  파이프라인 실패다. `max` 초과 시 `exhausted` 경로로 위임한다.
+- **if/goto** (권장 — 상태 체크 분기·루프): 직전 노드의 상태(`if: FAILED`)나
+  출력(`if: route == heavy`)을 체크해 점프한다.
+  - **뒤로 goto** (이미 나온 노드) = 피드백 루프. `max`(기본 3) 초과 시
+    `exhausted` 경로로 위임. goto 에 리스트를 주면 여러 노드 재작업.
+  - **앞·측면·END·FAIL 로 goto** = 조건 분기. 대상 노드는 자동 `join: any`.
+  - `if` 를 생략하면 무조건 점프이고 순차 흐름은 거기서 끊긴다.
+  - OUTPUT 조건(`==`/`!=`)이면 다음 스텝의 기본 엣지에 부정 조건이 자동
+    주입돼 배타가 보장된다 (`in` 은 자동 배타 미지원 — branch 를 써라).
+- **loop**: 루프 범위를 블록으로 명시하고 싶을 때. `body` 안에서 **redo 스텝
+  이후의 노드가 FAILED** 를 보고하면 redo 노드로 피드백한다. redo 스텝
+  이전(포함) 노드의 FAILED 는 파이프라인 실패. `max` 초과 시 `exhausted` 위임.
+  ```yaml
+  - loop:
+      max: 2
+      exhausted: [escalate, FAIL]
+      redo: implement                  # 생략 시 body 첫 노드
+      body:
+        - parallel: [implement, test]
+        - qa
+        - review
+  ```
 - **branch**: 선행 노드의 GRAPH_OUTPUT(`on` 키) 또는 STATUS 로 케이스를
   고른다. 매칭되는 케이스가 없으면 데드락으로 파이프라인 실패 — 케이스를
   전수 정의하라. 합류점(다음 스텝)은 자동으로 `join: any` 가 된다
   (노드에 join 을 명시했으면 그 값을 존중).
+- **합류점 주의**: 여러 경로 중 일부만 도착하는 노드에 수동 `edges:` 로
+  들어오는 엣지를 섞으면 `join: any` 를 노드에 명시해야 한다.
 
 ## settings
 

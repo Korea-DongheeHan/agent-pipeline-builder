@@ -1,9 +1,18 @@
 # graph-builder
 
 **yml + 프롬프트 파일**로 멀티 에이전트 그래프 파이프라인 — 그래프(루프(하네스)) —
-을 정의하고 실행하는 Claude Code 메타 스킬 + 러너.
+을 정의하고 실행하는 Claude Code **하네스 빌더**.
 
-- 사용자: `pipeline.yml` + `prompts/*.md` 작성 (스킬이 스캐폴딩)
+```
+graph-builder (빌더, user scope 설치)
+    │  "에이전트 팀 파이프라인 만들어줘"
+    ▼
+<project>/.claude/skills/<파이프라인명>/   ← 독자 실행 하네스 (빌더 불필요)
+    SKILL.md · pipeline.yml · prompts/ · scripts/run_graph.py
+<project>/CLAUDE.md                        ← 트리거 규칙 자동 등록
+```
+
+- 사용자: `pipeline.yml` + `prompts/*.md` 만 관리 (빌더가 스캐폴딩)
 - 러너(`scripts/run_graph.py`): 실행, 상태 관리, 조건 분기, 병렬, 피드백 루프
 - 노드 = `claude -p` 헤드리스 서브 에이전트, 엣지 = 트리거(조건·루프)
 
@@ -27,19 +36,19 @@ python3 scripts/run_graph.py examples/leave-batch/pipeline.yml
 ```yaml
 workflow:
   - analyst
-  - loop:                              # 피드백 루프: 판정 실패 → 재작업
-      max: 2
-      exhausted: [escalate, FAIL]      # 소진 시 에스컬레이션 보고 후 실패 종결
-      redo: implement
-      body:
-        - parallel: [implement, test]  # Fan-Out → 다음 스텝에서 Fan-In
-        - qa
-        - review
-  - branch:                            # GRAPH_OUTPUT 값 기반 조건 분기
+  - parallel: [implement, test]    # Fan-Out → 다음 스텝에서 Fan-In
+  - qa
+  - if: FAILED                     # 상태 체크 점프 — 뒤로 goto = 피드백 루프
+    goto: implement
+    max: 2
+    exhausted: [escalate, FAIL]    # 소진 → 에스컬레이션 보고 후 실패 종결
+  - review
+  - branch:                        # GRAPH_OUTPUT 값 기반 다중 케이스 분기
       on: route
       cases:
         heavy: process-heavy
         light: process-light
+  - finalize                       # 합류점 — 자동 join: any
 ```
 
 ## 기능
@@ -47,34 +56,57 @@ workflow:
 | 기능 | 방법 |
 |---|---|
 | 순차/병렬 (Fan-Out/In) | `workflow` 나열 / `parallel: [a, b]` 블록 |
-| 피드백 루프 | `loop: {body, redo, max, exhausted}` 블록 |
-| 조건 분기 | `branch: {on: 출력키, cases: ...}` 블록 (STATUS 분기는 on 생략) |
-| 저수준 제어 | `edges:` — from/to/when(표현식 `route == heavy` 지원)/loop, `to: FAIL` 종결 |
+| 상태 체크 분기·루프 | `if: FAILED` + `goto:` (뒤로 = 루프, 앞으로 = 분기) |
+| 다중 케이스 분기 | `branch: {on: 출력키, cases: ...}` |
+| 루프 블록 | `loop: {body, redo, max, exhausted}` |
+| 저수준 제어 | `edges:` — from/to/when(표현식 `route == heavy`)/loop, `to: FAIL` 종결 |
 | 상태 관리·재개 | `.graph-runs/<run-id>/state.json`, `--resume RUN_ID` (성공 노드 캐시 재사용) |
 | 모의 실행 | `--mock`, `--mock-status NODE=FAILED,SUCCEEDED`, `--mock-output 'NODE={...}'` |
 | 시각화·계획 | `--mermaid`, `--dry-run`, `--validate` |
 | 전용 에이전트 재사용 | 노드 `agent: my-analyst` → `claude --agent` |
+| 트리 UI 관찰 | 세션 모드 (`references/session-mode.md`) — Claude 가 Agent 툴로 직접 오케스트레이션 |
 
 에이전트는 작업 후 마지막 줄에 `GRAPH_STATUS: SUCCEEDED|FAILED` 를 보고하고
 (러너가 프로토콜을 프롬프트에 자동 주입), 분기용 값은
 `GRAPH_OUTPUT: {"key": "value"}` 로 넘긴다.
 
+## 실행 모델 — 배포 전 반드시 알아야 할 것
+
+- **비용**: 노드 1회 실행 = claude 헤드리스 세션 1개. 최대 세션 수
+  ≈ 노드 수 + (피드백 노드 수 × 루프 max). 얇은 변경은 파이프라인 대신
+  직접 수행이 낫다 — CLAUDE.md 트리거에 단서 조항을 두라.
+- **컨텍스트 격리**: 각 노드는 빈 컨텍스트에서 시작하는 독립 세션이다.
+  노드 간 전달은 러너가 주입하는 "선행 노드 출력(기본 8,000자 절단) + 전체
+  출력 파일 경로"뿐 (bounded handoff). 오케스트레이터는 스크립트라
+  컨텍스트 오염이 없다.
+- **관찰성**: 러너 모드는 콘솔 로그(▶/✔/↻/●) + `.graph-runs/` 산출물로,
+  세션 모드는 Claude Code 트리 UI 로 관찰한다. 러너 모드의 노드 내부
+  tool-use 는 실시간으로 보이지 않는다 (출력 전문은 파일로 저장).
+- **권한**: 노드 세션의 permission-mode 는 `settings.claude_args` 로 정한다
+  (템플릿 기본 `acceptEdits`). 코드가 아닌 읽기 전용 파이프라인이면 낮춰라.
+- **사람 게이트 없음**: headless 노드는 질문할 수 없다. 스펙 확정은 실행
+  전에, 커밋·머지는 실행 후에 사람이 한다.
+
 ## 구조
 
 ```
-SKILL.md                    # 메타 스킬 — 팀 성격(development/workflow)별 스캐폴딩 절차
-scripts/run_graph.py        # 오케스트레이션 러너 (단일 파일)
-references/yml-spec.md      # pipeline.yml 전체 스펙
+SKILL.md                    # 빌더 메타 스킬 — 하네스 스캐폴딩 절차
+scripts/run_graph.py        # 오케스트레이션 러너 (단일 파일, 산출물에 복사됨)
+references/yml-spec.md      # pipeline.yml 전체 스펙 (DSL + 저수준 edges)
 references/prompt-guide.md  # 프롬프트 작성 규칙 + 하네스 스킬 변환 매핑
-templates/dev-team/         # development 템플릿: 설계→병렬 구현→테스트→리뷰+피드백 루프
-templates/workflow/         # workflow 템플릿: 태스크 체인 + OUTPUT 조건 분기
+references/session-mode.md  # 세션 오케스트레이션(트리 UI) 해석 규칙
+templates/dev-team/         # 기본 파이프라인 템플릿 (병렬 + if/goto 루프)
+templates/pipeline-skill.md # 생성될 파이프라인 스킬(SKILL.md) 템플릿
 examples/leave-batch/       # 배치 태스크 체인 예제
 examples/dev-harness-graph/ # 오케스트레이터 하네스 스킬의 그래프 변환 예제
 ```
 
-## 스킬 설치
+## 빌더 설치
 
 ```bash
-ln -s "$(pwd)" ~/.claude/skills/graph-builder   # 개인 스킬로
-# 또는 프로젝트 스킬: <프로젝트>/.claude/skills/graph-builder 에 복사
+ln -s "$(pwd)" ~/.claude/skills/graph-builder   # user scope
 ```
+
+이후 아무 프로젝트에서 "에이전트 팀 파이프라인 만들어줘" 라고 하면 빌더가
+kind 파악 → 설계 확인(mermaid) → `.claude/skills/` 하네스 생성 → CLAUDE.md
+등록 → mock 검증 → 인계 보고 순으로 진행한다.
