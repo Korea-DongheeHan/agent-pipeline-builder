@@ -1,0 +1,47 @@
+# development 팀 템플릿: 설계 → (병렬 구현) → 테스트 → 리뷰 + 피드백 루프
+# 실행: python3 scripts/run_graph.py pipeline.yml --var requirement="요구사항"
+name: dev-team
+kind: development
+
+settings:
+  parallelism: 4
+  state_dir: .graph-runs
+  # 서브 에이전트 claude 세션에 전달할 공통 인자
+  claude_args: ["--permission-mode", "acceptEdits"]
+
+vars:
+  requirement: "구현할 요구사항을 --var requirement=... 로 주입하라"
+
+nodes:
+  - id: architect
+    prompt: prompts/architect.md
+  - id: impl-core          # Fan-Out: 도메인/코어 구현
+    prompt: prompts/impl-core.md
+  - id: impl-api           # Fan-Out: API/어댑터 구현
+    prompt: prompts/impl-api.md
+  - id: test               # Fan-In: 두 구현이 모두 끝나야 실행 (join: all 기본값)
+    prompt: prompts/test.md
+  - id: review
+    prompt: prompts/review.md
+
+edges:
+  - from: START
+    to: architect
+  - from: architect
+    to: [impl-core, impl-api]        # Fan-Out (병렬)
+  - from: impl-core
+    to: test
+  - from: impl-api
+    to: test                          # Fan-In (join: all)
+  - from: test
+    to: review
+  - from: test                        # 테스트 실패 → 구현 피드백 루프
+    to: [impl-core, impl-api]
+    when: FAILED
+    loop: {max: 3, on_exhausted: FAIL}
+  - from: review
+    to: END
+  - from: review                      # 리뷰 REQUEST_CHANGES → 구현 피드백 루프
+    to: [impl-core, impl-api]
+    when: FAILED
+    loop: {max: 3, on_exhausted: FAIL}

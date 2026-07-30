@@ -1,0 +1,44 @@
+# workflow 템플릿: 태스크 체인 + OUTPUT 기반 조건 분기 + join: any 합류
+# 실행: python3 scripts/run_graph.py pipeline.yml
+name: workflow
+kind: workflow
+
+settings:
+  parallelism: 4
+  state_dir: .graph-runs
+  claude_args: ["--permission-mode", "acceptEdits"]
+
+nodes:
+  - id: prepare
+    prompt: prompts/prepare.md
+  - id: process-heavy
+    prompt: prompts/process-heavy.md
+  - id: process-light
+    prompt: prompts/process-light.md
+  - id: finalize
+    prompt: prompts/finalize.md
+    join: any            # heavy/light 중 실행된 한쪽만 도착해도 진행
+
+edges:
+  - from: START
+    to: prepare
+  - from: prepare        # 조건 분기: prepare 가 보고한 GRAPH_OUTPUT.route 로 결정
+    to: process-heavy
+    when: [{type: OUTPUT, key: route, equals: heavy}]
+  - from: prepare
+    to: process-light
+    when: [{type: OUTPUT, key: route, equals: light}]
+  - from: process-heavy
+    to: finalize
+  - from: process-light
+    to: finalize
+  - from: finalize
+    to: END
+  # 어떤 태스크든 FAILED 를 처리하는 엣지가 없으면 파이프라인이 즉시 FAILED 로
+  # 끝난다 (기본 동작). 실패 후처리가 필요하면 아래처럼 명시적으로 라우팅한다:
+  # - from: [prepare, process-heavy, process-light]
+  #   to: on-failure
+  #   when: FAILED
+  # - from: on-failure
+  #   to: FAIL           # 후처리 후 파이프라인을 의도적으로 실패로 종결
+  #   when: ALWAYS

@@ -1,0 +1,19 @@
+# 태스크 입력: 테스트 작성 (point-dev Phase 2 test-engineer 대응)
+
+역할·프로토콜은 point-test-engineer 에이전트 정의를 따른다. 아래는 태스크 입력이다.
+
+## 요구사항
+{{vars.requirement}}
+
+## 작업
+선행 노드 `analyst`가 확정한 인터페이스·acceptance 기준(하단 컨텍스트)을
+기준으로 단위 테스트를 작성하라. 구현(implement 노드)과 병렬로 돌기
+때문에 구현 완성을 기다리지 말고 인터페이스 기준으로 작성한다 —
+실행 검증은 후속 qa 노드가 구현과 합쳐 수행한다.
+
+- acceptance 항목(`A1, A2, ...`)별로 최소 1개 테스트를 매핑하라.
+- 구현 코드를 직접 수정하지 마라.
+
+## 판정
+acceptance 전 항목에 테스트를 매핑해 작성 완료 시 SUCCEEDED,
+인터페이스 미확정 등으로 작성 불가면 FAILED.
