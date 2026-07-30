@@ -28,16 +28,16 @@ nodes:
     prompt: prompts/review.md
 
 # 워크플로우는 위에서 아래로 읽는다. START/END 는 자동 연결.
-# if/goto: 직전 노드의 상태를 체크해 점프한다. 이미 나온 노드로의 goto 는
-# 자동으로 피드백 루프가 된다 (max 초과 시 exhausted 경로, 기본 FAIL).
+# 노드에 if/goto 를 부착하면 그 노드의 상태·출력을 체크해 점프한다.
+# 이미 나온 노드로의 goto 는 자동으로 피드백 루프 (max 초과 시 exhausted, 기본 FAIL).
 workflow:
   - architect
   - parallel: [impl-core, impl-api]   # Fan-Out — 다음 스텝(test)에서 Fan-In
-  - test
-  - if: FAILED                        # 테스트 실패 → 구현 재작업 루프
-    goto: [impl-core, impl-api]
-    max: 3
-  - review
-  - if: FAILED                        # 리뷰 REQUEST_CHANGES → 재작업 루프
-    goto: [impl-core, impl-api]
-    max: 3
+  - test:
+      if: FAILED                      # 테스트 실패 → 구현 재작업 루프
+      goto: [impl-core, impl-api]
+      max: 3
+  - review:
+      if: FAILED                      # 리뷰 REQUEST_CHANGES → 재작업 루프
+      goto: [impl-core, impl-api]
+      max: 3

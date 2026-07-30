@@ -27,16 +27,16 @@ description: 멀티 에이전트 그래프 파이프라인(하네스) 빌더 메
 ```yaml
 workflow:
   - analyst
-  - parallel: [implement, test]   # Fan-Out → 다음 스텝에서 Fan-In
-  - qa
-  - if: FAILED                    # 상태 체크 점프. 이미 나온 노드로 = 피드백 루프
-    goto: implement
-    max: 2
-    exhausted: [escalate, FAIL]   # 소진 → 보고 후 의도적 실패 종결
-  - review
-  - if: FAILED
-    goto: implement
-    max: 2
+  - parallel: [implement, test]     # Fan-Out → 다음 스텝에서 Fan-In
+  - qa:
+      if: FAILED                    # 이 노드의 상태 체크. 이미 나온 노드로 goto = 피드백 루프
+      goto: implement
+      max: 2
+      exhausted: [escalate, FAIL]   # 소진 → 보고 후 의도적 실패 종결
+  - review:
+      if: FAILED
+      goto: implement
+      max: 2
 ```
 
 설계 원칙:

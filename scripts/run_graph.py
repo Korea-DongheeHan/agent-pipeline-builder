@@ -470,40 +470,61 @@ def compile_workflow(wf, mark_join_any):
         """스텝 시퀀스 → (첫 스텝 entries, 마지막 exits). prev_exits 와 자동 연결."""
         first_entries = None
         merge_next = merge_first
-        pending_neg = []  # 직전 if/goto(OUTPUT 조건)의 부정 — 다음 스텝 엣지에 주입해 배타 보장
+        pending_neg = []  # if/goto(OUTPUT 조건)의 부정 — 다음 스텝 엣지에 주입해 배타 보장
+
+        def apply_goto(src, spec):
+            """src 노드에 라우팅 규칙 1개 적용. 순차 흐름 유지 여부를 반환."""
+            cond = spec.get("if", "ALWAYS")
+            targets = [str(t) for t in _as_list(spec["goto"])]
+            backward = any(t in placed for t in targets)
+            loop_cfg = None
+            if backward or "max" in spec:
+                exh = spec.get("exhausted", "FAIL")
+                if isinstance(exh, list):
+                    x_en, _ = compile_seq(exh, None, False)
+                    exh = x_en[0]
+                loop_cfg = {"max": int(spec.get("max", 3)), "on_exhausted": str(exh)}
+            else:
+                for t in targets:  # 앞으로 점프 = 분기 합류 가능성 → join: any
+                    if t not in (END, FAIL):
+                        mark_join_any(t)
+            connect([src], targets, when=cond, loop=loop_cfg)
+            if "if" not in spec:
+                return False  # 무조건 점프 — 순차 흐름은 여기서 끊긴다
+            for c in _normalize_when(cond):
+                if c["type"] == "OUTPUT" and "equals" in c:
+                    pending_neg.append(
+                        {"type": "OUTPUT", "key": c["key"], "not_equals": c["equals"]}
+                    )
+                elif c["type"] == "OUTPUT" and "not_equals" in c:
+                    pending_neg.append(
+                        {"type": "OUTPUT", "key": c["key"], "equals": c["not_equals"]}
+                    )
+                # STATUS FAILED 는 기본 성공 엣지와 이미 배타, in 은 자동 배타 미지원
+            return True
+
         for step in _as_list(steps):
+            # 노드 부착 라우팅: - test: {if: FAILED, goto: ...} (규칙 리스트 허용)
+            routes = None
+            if isinstance(step, dict) and len(step) == 1:
+                k0, v0 = next(iter(step.items()))
+                if k0 not in ("parallel", "loop", "branch"):
+                    if isinstance(v0, dict) and "goto" in v0:
+                        routes = [v0]
+                    elif (
+                        isinstance(v0, list)
+                        and v0
+                        and all(isinstance(r, dict) and "goto" in r for r in v0)
+                    ):
+                        routes = v0
+                    if routes is not None:
+                        step = str(k0)
             if isinstance(step, dict) and "goto" in step:
+                # (호환) 형제 스텝 형태: - if: ... / goto: ... — 직전 노드에 적용
                 if not prev_exits or len(prev_exits) != 1 or prev_exits[0] == START:
                     raise PipelineError("if/goto 는 단일 선행 노드 바로 뒤에만 올 수 있다")
-                src = prev_exits[0]
-                cond = step.get("if", "ALWAYS")
-                targets = [str(t) for t in _as_list(step["goto"])]
-                backward = any(t in placed for t in targets)
-                loop_cfg = None
-                if backward or "max" in step:
-                    exh = step.get("exhausted", "FAIL")
-                    if isinstance(exh, list):
-                        x_en, _ = compile_seq(exh, None, False)
-                        exh = x_en[0]
-                    loop_cfg = {"max": int(step.get("max", 3)), "on_exhausted": str(exh)}
-                else:
-                    for t in targets:  # 앞으로 점프 = 분기 합류 가능성 → join: any
-                        if t not in (END, FAIL):
-                            mark_join_any(t)
-                connect([src], targets, when=cond, loop=loop_cfg)
-                if "if" not in step:
-                    prev_exits = []  # 무조건 점프 — 순차 흐름은 여기서 끊긴다
-                else:
-                    for c in _normalize_when(cond):
-                        if c["type"] == "OUTPUT" and "equals" in c:
-                            pending_neg.append(
-                                {"type": "OUTPUT", "key": c["key"], "not_equals": c["equals"]}
-                            )
-                        elif c["type"] == "OUTPUT" and "not_equals" in c:
-                            pending_neg.append(
-                                {"type": "OUTPUT", "key": c["key"], "equals": c["not_equals"]}
-                            )
-                        # STATUS FAILED 는 기본 성공 엣지와 이미 배타, in 은 자동 배타 미지원
+                if not apply_goto(prev_exits[0], step):
+                    prev_exits = []
                 continue
             if isinstance(step, dict) and len(step) == 1 and next(iter(step)) == "branch":
                 spec = step["branch"] or {}
@@ -542,6 +563,10 @@ def compile_workflow(wf, mark_join_any):
             pending_neg = []
             prev_exits = ex
             merge_next = False
+            if routes:
+                for r in routes:
+                    if not apply_goto(ex[0], r):
+                        prev_exits = []
         return first_entries or [], prev_exits or []
 
     _, final_exits = compile_seq(wf, [START], False)

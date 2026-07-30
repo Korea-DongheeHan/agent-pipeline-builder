@@ -37,11 +37,11 @@ python3 scripts/run_graph.py examples/leave-batch/pipeline.yml
 workflow:
   - analyst
   - parallel: [implement, test]    # Fan-Out → 다음 스텝에서 Fan-In
-  - qa
-  - if: FAILED                     # 상태 체크 점프 — 뒤로 goto = 피드백 루프
-    goto: implement
-    max: 2
-    exhausted: [escalate, FAIL]    # 소진 → 에스컬레이션 보고 후 실패 종결
+  - qa:
+      if: FAILED                   # 이 노드의 상태 체크 — 뒤로 goto = 피드백 루프
+      goto: implement
+      max: 2
+      exhausted: [escalate, FAIL]  # 소진 → 에스컬레이션 보고 후 실패 종결
   - review
   - branch:                        # GRAPH_OUTPUT 값 기반 다중 케이스 분기
       on: route
@@ -56,7 +56,7 @@ workflow:
 | 기능 | 방법 |
 |---|---|
 | 순차/병렬 (Fan-Out/In) | `workflow` 나열 / `parallel: [a, b]` 블록 |
-| 상태 체크 분기·루프 | `if: FAILED` + `goto:` (뒤로 = 루프, 앞으로 = 분기) |
+| 상태 체크 분기·루프 | 노드에 `{if: FAILED, goto: ...}` 부착 (뒤로 = 루프, 앞으로 = 분기) |
 | 다중 케이스 분기 | `branch: {on: 출력키, cases: ...}` |
 | 루프 블록 | `loop: {body, redo, max, exhausted}` |
 | 저수준 제어 | `edges:` — from/to/when(표현식 `route == heavy`)/loop, `to: FAIL` 종결 |

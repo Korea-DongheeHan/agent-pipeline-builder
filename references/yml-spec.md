@@ -25,11 +25,11 @@ edges: [ ... ]           # 저수준 — 엣지 직접 정의 (workflow 와 병�
 workflow:
   - analyst                            # 문자열 = 노드 순차 실행 (선행 SUCCEEDED 시)
   - parallel: [implement, test]        # Fan-Out. 항목 = 노드 | 시퀀스 | 중첩 블록
-  - qa                                 # Fan-In — 병렬 갈래가 모두 끝나야 실행
-  - if: FAILED                         # 직전 노드(qa) 상태·출력 체크 후 점프
-    goto: implement                    # 이미 나온 노드로 = 피드백 루프 (자동 판정)
-    max: 2                             # 루프 상한 (뒤로 goto 기본 3)
-    exhausted: [escalate, FAIL]        # 소진 시 경로: FAIL(기본) | 노드 | 시퀀스
+  - qa:                                # Fan-In — 병렬 갈래가 모두 끝나야 실행
+      if: FAILED                       # 노드 부착 라우팅: 이 노드의 상태·출력 체크 후 점프
+      goto: implement                  # 이미 나온 노드로 = 피드백 루프 (자동 판정)
+      max: 2                           # 루프 상한 (뒤로 goto 기본 3)
+      exhausted: [escalate, FAIL]      # 소진 시 경로: FAIL(기본) | 노드 | 시퀀스
   - review
   - branch:                            # 다중 케이스 분기 (단일 선행 노드 뒤에만)
       on: route                        # GRAPH_OUTPUT 키. 생략 시 케이스 키가
@@ -44,8 +44,14 @@ workflow:
 - **순차**: 리스트 순서대로. 각 연결의 기본 조건은 선행 SUCCEEDED.
 - **parallel**: 갈래를 동시에 실행. 다음 스텝은 모든 갈래 완료를 기다린다
   (join: all). 갈래 안에 시퀀스·중첩 블록을 넣을 수 있다.
-- **if/goto** (권장 — 상태 체크 분기·루프): 직전 노드의 상태(`if: FAILED`)나
-  출력(`if: route == heavy`)을 체크해 점프한다.
+- **if/goto** (권장 — 상태 체크 분기·루프): 노드에 라우팅 규칙을 부착한다.
+  상태(`if: FAILED`)나 출력(`if: route == heavy`)을 체크해 점프한다.
+  ```yaml
+  - qa:                          # 규칙 여러 개는 리스트로:
+      if: FAILED                 #   - qa:
+      goto: implement            #       - {if: FAILED, goto: implement, max: 2}
+      max: 2                     #       - {if: risk == high, goto: security}
+  ```
   - **뒤로 goto** (이미 나온 노드) = 피드백 루프. `max`(기본 3) 초과 시
     `exhausted` 경로로 위임. goto 에 리스트를 주면 여러 노드 재작업.
   - **앞·측면·END·FAIL 로 goto** = 조건 분기. 대상 노드는 자동 `join: any`.
