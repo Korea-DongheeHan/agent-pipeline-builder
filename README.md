@@ -1,24 +1,36 @@
 # graph-builder
 
 **yml + 프롬프트 파일**로 멀티 에이전트 그래프 파이프라인 — 그래프(루프(하네스)) —
-을 정의하고 실행하는 Claude Code **하네스 빌더**.
+을 정의하고 실행하는 **Claude Code 플러그인**.
 
 ```
-graph-builder (빌더, user scope 설치)
-    │  "에이전트 팀 파이프라인 만들어줘"
+graph-builder 플러그인 (빌더)
+    │  "에이전트 팀 파이프라인 만들어줘"  →  graph-builder:build 스킬
     ▼
-<project>/.claude/skills/<파이프라인명>/   ← 독자 실행 하네스 (빌더 불필요)
+<project>/.claude/skills/<파이프라인명>/   ← 독자 실행 산출물 (플러그인 불필요)
     SKILL.md · pipeline.yml · prompts/ · scripts/run_graph.py
 <project>/CLAUDE.md                        ← 트리거 규칙 자동 등록
 ```
 
 - 사용자: `pipeline.yml` + `prompts/*.md` 만 관리 (빌더가 스캐폴딩)
-- 러너(`scripts/run_graph.py`): 실행, 상태 관리, 조건 분기, 병렬, 피드백 루프
+- 러너(`run_graph.py`): 실행, 상태 관리, 조건 분기, 병렬, 피드백 루프
 - 노드 = `claude -p` 헤드리스 서브 에이전트, 엣지 = 트리거(조건·루프)
 
-## 빠른 시작
+## 설치
+
+```
+/plugin marketplace add <이 저장소 git URL 또는 로컬 경로>
+/plugin install graph-builder@graph-builder-marketplace
+```
+
+설치 후 아무 프로젝트에서 "에이전트 팀 파이프라인 만들어줘"라고 하면
+`graph-builder:build` 스킬이 설계 확인(mermaid) → `.claude/skills/` 하네스 생성 →
+CLAUDE.md 등록 → mock 검증 → 인계 보고 순으로 진행한다.
+
+## 빠른 시작 (예제 직접 실행)
 
 ```bash
+cd skills/build
 # 검증 → 시각화 → 모의 실행 → 실제 실행
 python3 scripts/run_graph.py examples/leave-batch/pipeline.yml --validate
 python3 scripts/run_graph.py examples/leave-batch/pipeline.yml --mermaid
@@ -90,23 +102,17 @@ workflow:
 ## 구조
 
 ```
-SKILL.md                    # 빌더 메타 스킬 — 하네스 스캐폴딩 절차
-scripts/run_graph.py        # 오케스트레이션 러너 (단일 파일, 산출물에 복사됨)
-references/yml-spec.md      # pipeline.yml 전체 스펙 (DSL + 저수준 edges)
-references/prompt-guide.md  # 프롬프트 작성 규칙 + 하네스 스킬 변환 매핑
-references/session-mode.md  # 세션 오케스트레이션(트리 UI) 해석 규칙
-templates/dev-team/         # 기본 파이프라인 템플릿 (병렬 + if/goto 루프)
-templates/pipeline-skill.md # 생성될 파이프라인 스킬(SKILL.md) 템플릿
-examples/leave-batch/       # 배치 태스크 체인 예제
-examples/dev-harness-graph/ # 오케스트레이터 하네스 스킬의 그래프 변환 예제
+.claude-plugin/
+  plugin.json               # 플러그인 매니페스트
+  marketplace.json          # 셀프 호스팅 마켓플레이스 정의
+skills/build/               # graph-builder:build — 빌더 메타 스킬
+  SKILL.md                  # 하네스 스캐폴딩 절차
+  scripts/run_graph.py      # 오케스트레이션 러너 (단일 파일, 산출물에 복사됨)
+  references/yml-spec.md    # pipeline.yml 전체 스펙 (DSL + 저수준 edges)
+  references/prompt-guide.md    # 프롬프트 작성 규칙 + 하네스 스킬 변환 매핑
+  references/session-mode.md    # 세션 오케스트레이션(트리 UI) 해석 규칙
+  templates/dev-team/       # 기본 파이프라인 템플릿 (병렬 + if/goto 루프)
+  templates/pipeline-skill.md   # 생성될 파이프라인 스킬(SKILL.md) 템플릿
+  examples/leave-batch/     # 배치 태스크 체인 예제
+  examples/dev-harness-graph/   # 오케스트레이터 하네스 스킬의 그래프 변환 예제
 ```
-
-## 빌더 설치
-
-```bash
-ln -s "$(pwd)" ~/.claude/skills/graph-builder   # user scope
-```
-
-이후 아무 프로젝트에서 "에이전트 팀 파이프라인 만들어줘" 라고 하면 빌더가
-kind 파악 → 설계 확인(mermaid) → `.claude/skills/` 하네스 생성 → CLAUDE.md
-등록 → mock 검증 → 인계 보고 순으로 진행한다.

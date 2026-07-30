@@ -1,0 +1,15 @@
+{
+  "name": "graph-builder",
+  "version": "0.1.0",
+  "description": "yml + 프롬프트로 멀티 에이전트 그래프 파이프라인(그래프(루프(하네스)))을 구성하는 빌더. 산출물은 프로젝트 .claude/skills/ 에 독자 실행 파이프라인 스킬로 생성된다.",
+  "author": {
+    "name": "landsnail"
+  },
+  "keywords": [
+    "pipeline",
+    "orchestration",
+    "multi-agent",
+    "workflow",
+    "graph"
+  ]
+}
