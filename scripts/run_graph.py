@@ -563,7 +563,6 @@ class Runner:
         }
         self.iteration = {n: 0 for n in pipe.nodes}
         self.live = set()  # resume 시 캐시를 쓰면 안 되는(재실행 필요) 노드
-        self.rerun = set()
         self.futures = {}
         self.end_reached = False
         self.fail_reason = None
@@ -680,11 +679,10 @@ class Runner:
                 self.fail_reason = "노드 %s FAILED — 실패를 처리하는 엣지가 없다" % node
             else:
                 self.log("⚠ %s SUCCEEDED 이후 매칭되는 엣지가 없다 (경로 종료)" % node)
-        if node in self.rerun:
-            self.rerun.discard(node)
-            self._activate(node)
+        self._schedule()
 
     def _deliver(self, e):
+        """엣지 발화를 기록만 한다. 활성화 판단은 _schedule 이 일괄 수행."""
         if self.fail_reason or self.end_reached:
             return
         dst = e["dst"]
@@ -702,14 +700,40 @@ class Runner:
             self.live.add(dst)
         self.arrived[dst].add(e["key"])
         self.ever_arrived[dst].add(e["key"])
-        join = self.pipe.nodes[dst]["join"]
-        ready = join == "any" or self.required[dst] <= self.ever_arrived[dst]
-        if not ready:
+
+    def _is_active(self, node):
+        """실행 중이거나, 새 도착이 있어 곧 실행될 노드 — Fan-In 이 기다려야 한다."""
+        return node in self.futures.values() or bool(self.arrived.get(node))
+
+    def _schedule(self):
+        """새 도착(arrived)이 있는 노드 중 준비된 것을 활성화한다.
+
+        join=all 은 (sticky 포함) 전체 선행 조건 충족에 더해, 비-루프 업스트림이
+        아직 활동 중이면 대기한다 — 피드백 웨이브에서 업스트림 일부만 끝난
+        시점에 조기 재실행되는 것을 막는다.
+        """
+        if self.fail_reason or self.end_reached:
             return
-        if dst in self.futures.values():
-            self.rerun.add(dst)
-            return
-        self._activate(dst)
+        progressed = True
+        while progressed and not self.fail_reason and not self.end_reached:
+            progressed = False
+            for dst in list(self.pipe.nodes):
+                if not self.arrived[dst] or dst in self.futures.values():
+                    continue
+                join = self.pipe.nodes[dst]["join"]
+                if join != "any":
+                    if not self.required[dst] <= self.ever_arrived[dst]:
+                        continue
+                    upstream_busy = any(
+                        self._is_active(e["src"])
+                        for e in self.pipe.in_edges.get(dst, [])
+                        if not e["loop"] and e["src"] != START and e["src"] != dst
+                    )
+                    if upstream_busy:
+                        continue
+                self._activate(dst)
+                progressed = True
+                break  # 활성화가 arrived 를 바꾸므로 처음부터 재스캔
 
     def _activate(self, node):
         self.steps += 1
