@@ -304,20 +304,40 @@ def _as_list(v):
     return v if isinstance(v, list) else [v]
 
 
+_EXPR_RE = re.compile(r"^([\w.-]+)\s*(==|!=)\s*(.+)$")
+_EXPR_IN_RE = re.compile(r"^([\w.-]+)\s+in\s+(.+)$")
+
+
 def _normalize_when(when):
-    """when 정규화. 생략 시 STATUS==SUCCEEDED. 문자열 축약형 지원."""
+    """when 정규화. 생략 시 STATUS==SUCCEEDED.
+
+    문자열 축약형: SUCCEEDED | FAILED | ALWAYS
+    표현식(GRAPH_OUTPUT 비교): "route == heavy" | "route != heavy" | "route in [a, b]"
+    """
     if when is None:
         return [{"type": "STATUS", "status": "SUCCEEDED"}]
     conds = []
     for c in _as_list(when):
         if isinstance(c, str):
-            u = c.upper()
+            s = c.strip()
+            u = s.upper()
             if u == "ALWAYS":
                 conds.append({"type": "ALWAYS"})
             elif u in VALID_STATUS:
                 conds.append({"type": "STATUS", "status": u})
+            elif _EXPR_RE.match(s):
+                key, op, raw = _EXPR_RE.match(s).groups()
+                val = _value(raw.strip())
+                field = "equals" if op == "==" else "not_equals"
+                conds.append({"type": "OUTPUT", "key": key, field: val})
+            elif _EXPR_IN_RE.match(s):
+                key, raw = _EXPR_IN_RE.match(s).groups()
+                val = _value(raw.strip())
+                conds.append(
+                    {"type": "OUTPUT", "key": key, "in": val if isinstance(val, list) else [val]}
+                )
             else:
-                raise PipelineError("알 수 없는 when 축약형: %r" % c)
+                raise PipelineError("알 수 없는 when 표현식: %r" % c)
         elif isinstance(c, dict):
             c = dict(c)
             c["type"] = str(c.get("type", "STATUS")).upper()
@@ -327,6 +347,164 @@ def _normalize_when(when):
         else:
             raise PipelineError("when 조건 형식 오류: %r" % c)
     return conds
+
+
+def _sugar_get(d, key):
+    """PyYAML 이 'on' 을 불리언 True 키로 파싱하는 문제를 흡수한다."""
+    if key == "on":
+        return d.get("on", d.get(True))
+    return d.get(key)
+
+
+def _seq_node_ids(steps):
+    """workflow 스텝 트리에 등장하는 실행 노드 id 를 순서대로 수집 (터미널 제외)."""
+    ids = []
+    for step in _as_list(steps):
+        if isinstance(step, str):
+            if step.strip() not in (END, FAIL):
+                ids.append(step.strip())
+        elif isinstance(step, dict) and len(step) == 1:
+            kind, spec = next(iter(step.items()))
+            if kind == "parallel":
+                for br in _as_list(spec):
+                    ids += _seq_node_ids(br if isinstance(br, list) else [br])
+            elif kind == "loop":
+                ids += _seq_node_ids((spec or {}).get("body"))
+            elif kind == "branch":
+                for cseq in ((spec or {}).get("cases") or {}).values():
+                    ids += _seq_node_ids(cseq if isinstance(cseq, list) else [cseq])
+    return ids
+
+
+def compile_workflow(wf, mark_join_any):
+    """중첩 workflow 블록을 edges 목록으로 컴파일한다.
+
+    스텝 종류:
+      - "노드id" | "END" | "FAIL"          순차 실행 / 터미널
+      - parallel: [a, b, [c1, c2]]         Fan-Out (항목 = 노드 | 시퀀스 | 블록),
+                                           다음 스텝이 Fan-In(join: all)
+      - loop: {body: [...], max: N,        피드백 루프. body 안 redo 이후 노드가
+              redo: 노드|리스트,            FAILED 면 redo 로 재작업. redo 생략 시
+              exhausted: FAIL|노드|시퀀스}   body 첫 노드. 소진 시 exhausted 경로
+      - branch: {on: 출력키, cases: {...}}  조건 분기. on 생략 시 케이스 키는
+                                           SUCCEEDED|FAILED|ALWAYS (STATUS 분기).
+                                           케이스 값 = 노드 | 시퀀스. 분기 다음
+                                           스텝은 자동으로 join: any (합류점)
+
+    START/END 는 자동 연결된다 (첫 스텝 앞 START, 마지막 exits 뒤 END).
+    """
+    edges = []
+
+    def connect(srcs, dsts, when=None, loop=None):
+        for s in srcs:
+            for d in dsts:
+                e = {"from": s, "to": d}
+                if when is not None:
+                    e["when"] = when
+                if loop is not None:
+                    e["loop"] = dict(loop)
+                edges.append(e)
+
+    def compile_step(step, merge_point):
+        """단일 스텝 → (entries, exits). merge_point 면 진입 노드를 join: any 로."""
+        if isinstance(step, str):
+            s = step.strip()
+            if s in (END, FAIL):
+                return [s], []
+            if merge_point:
+                mark_join_any(s)
+            return [s], [s]
+        if not isinstance(step, dict) or len(step) != 1:
+            raise PipelineError("workflow 스텝 형식 오류: %r" % step)
+        kind, spec = next(iter(step.items()))
+        if kind == "parallel":
+            entries, exits = [], []
+            for br in _as_list(spec):
+                en, ex = compile_seq(br if isinstance(br, list) else [br], None, merge_point)
+                entries += en
+                exits += ex
+            if not entries:
+                raise PipelineError("parallel 블록이 비어 있다")
+            return entries, exits
+        if kind == "loop":
+            spec = spec or {}
+            body = spec.get("body") or []
+            if not body:
+                raise PipelineError("loop 블록에는 body 가 필요하다")
+            en, ex = compile_seq(body, None, merge_point)
+            redo = [str(r) for r in _as_list(spec.get("redo"))] or list(en)
+            exh = spec.get("exhausted", "FAIL")
+            if isinstance(exh, list):
+                x_en, _ = compile_seq(exh, None, False)
+                on_exh = x_en[0]
+            else:
+                on_exh = str(exh)
+            loop_cfg = {"max": int(spec.get("max", 3)), "on_exhausted": on_exh}
+            body_ids = _seq_node_ids(body)
+            missing = [r for r in redo if r not in body_ids]
+            if missing:
+                raise PipelineError("loop redo 대상이 body 에 없다: %s" % ", ".join(missing))
+            # redo 대상이 속한 스텝 '이후' 스텝의 노드들이 FAILED 면 redo 로 피드백
+            redo_step = 0
+            for i, st in enumerate(body):
+                if set(redo) & set(_seq_node_ids([st])):
+                    redo_step = i
+                    break
+            fb_srcs = _seq_node_ids(body[redo_step + 1 :])
+            for s in fb_srcs:
+                connect([s], redo, when="FAILED", loop=loop_cfg)
+            return en, ex
+        if kind == "branch":
+            raise PipelineError("branch 는 선행 노드가 필요하다 — 시퀀스 안에서만 쓸 수 있다")
+        raise PipelineError("알 수 없는 workflow 블록: %r" % kind)
+
+    def compile_seq(steps, prev_exits, merge_first):
+        """스텝 시퀀스 → (첫 스텝 entries, 마지막 exits). prev_exits 와 자동 연결."""
+        first_entries = None
+        merge_next = merge_first
+        for step in _as_list(steps):
+            if isinstance(step, dict) and len(step) == 1 and next(iter(step)) == "branch":
+                spec = step["branch"] or {}
+                if not prev_exits or len(prev_exits) != 1 or prev_exits[0] == START:
+                    raise PipelineError("branch 는 단일 선행 노드 바로 뒤에만 올 수 있다")
+                src = prev_exits[0]
+                key = _sugar_get(spec, "on")
+                cases = spec.get("cases") or {}
+                if not cases:
+                    raise PipelineError("branch 블록에는 cases 가 필요하다")
+                exits = []
+                for ck, cseq in cases.items():
+                    if key is not None:
+                        when = [{"type": "OUTPUT", "key": str(key), "equals": ck}]
+                    else:
+                        u = str(ck).upper()
+                        if u == "ALWAYS":
+                            when = [{"type": "ALWAYS"}]
+                        elif u in VALID_STATUS:
+                            when = [{"type": "STATUS", "status": u}]
+                        else:
+                            raise PipelineError(
+                                "branch(on 없음) 케이스 키는 SUCCEEDED|FAILED|ALWAYS: %r" % ck
+                            )
+                    en, ex = compile_seq(cseq if isinstance(cseq, list) else [cseq], None, False)
+                    connect([src], en, when=when)
+                    exits += ex
+                prev_exits = exits
+                merge_next = True  # 분기 합류점은 한 케이스만 도착 — join: any
+                continue
+            en, ex = compile_step(step, merge_next)
+            if first_entries is None:
+                first_entries = en
+            if prev_exits:
+                connect(prev_exits, en)
+            prev_exits = ex
+            merge_next = False
+        return first_entries or [], prev_exits or []
+
+    _, final_exits = compile_seq(wf, [START], False)
+    if final_exits:
+        connect(final_exits, [END])
+    return edges
 
 
 class Pipeline:
@@ -344,6 +522,7 @@ class Pipeline:
             self.settings["claude_args"] = shlex.split(self.settings["claude_args"])
 
         self.nodes = {}
+        explicit_join = set()
         for nd in doc.get("nodes") or []:
             if not isinstance(nd, dict) or not nd.get("id"):
                 raise PipelineError("노드에는 id가 필요하다: %r" % nd)
@@ -352,6 +531,8 @@ class Pipeline:
                 raise PipelineError("노드 id로 %s 는 예약어다" % nid)
             if nid in self.nodes:
                 raise PipelineError("노드 id 중복: %s" % nid)
+            if "join" in nd:
+                explicit_join.add(nid)
             self.nodes[nid] = {
                 "id": nid,
                 "prompt": nd.get("prompt"),
@@ -364,8 +545,18 @@ class Pipeline:
                 "context": [str(c) for c in _as_list(nd.get("context"))],
             }
 
+        # workflow(중첩 DSL) → edges 컴파일. 분기 합류점은 join: any 로 (명시 설정 우선)
+        auto_any = set()
+        raw_edges = []
+        if doc.get("workflow"):
+            raw_edges += compile_workflow(doc["workflow"], auto_any.add)
+        raw_edges += doc.get("edges") or []
+        for nid in auto_any:
+            if nid in self.nodes and nid not in explicit_join:
+                self.nodes[nid]["join"] = "any"
+
         self.edges = []
-        for i, ed in enumerate(doc.get("edges") or []):
+        for i, ed in enumerate(raw_edges):
             if not isinstance(ed, dict):
                 raise PipelineError("엣지 형식 오류: %r" % ed)
             srcs = [str(s) for s in _as_list(ed.get("from"))]

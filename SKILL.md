@@ -24,16 +24,34 @@ description: 멀티 에이전트 그래프 파이프라인(팀) 구성 메타 �
 
 ### 2. 그래프 설계
 
-요구사항에서 노드(역할/태스크)와 엣지(순서·분기·루프)를 도출해 사용자에게
-표로 확인받는다. 설계 원칙:
+요구사항에서 노드(역할/태스크)와 흐름(순서·분기·루프)을 도출해 사용자에게
+표로 확인받는다. 흐름은 **중첩 workflow DSL** 로 쓴다 (위에서 아래로 읽히고
+START/END 자동 연결 — 스펙: `references/yml-spec.md`):
 
-- 병렬 가능한 작업은 Fan-Out 하고, 동기화 지점에 Fan-In(`join: all`) 노드를 둔다
-- 판정 노드(테스트·QA·리뷰)의 FAILED 는 피드백 엣지로 재작업 노드에 돌리고,
-  반드시 `loop: {max: N, on_exhausted: ...}` 을 붙인다 (무한 루프 방지)
-- 값 기반 분기는 GRAPH_OUTPUT 키를 정하고 OUTPUT 조건 엣지로 라우팅한다
+```yaml
+workflow:
+  - analyst
+  - loop:                              # 피드백 루프: 판정 실패 → 재작업
+      max: 2
+      exhausted: [escalate, FAIL]
+      redo: implement
+      body:
+        - parallel: [implement, test]  # Fan-Out → 다음 스텝에서 Fan-In
+        - qa
+        - review
+```
+
+설계 원칙:
+
+- 병렬 가능한 작업은 `parallel` 블록으로, 판정 노드(테스트·QA·리뷰)의 재작업은
+  `loop` 블록으로 표현한다 — `max` 로 무한 루프를 막고 `exhausted` 로 소진 시
+  경로(에스컬레이션 보고 등)를 정한다
+- 값 기반 분기는 GRAPH_OUTPUT 키를 정하고 `branch: {on: 키, cases: ...}` 로
+  라우팅한다 (케이스 전수 정의 — 미매칭은 데드락 실패)
+- 특수 위상만 저수준 `edges:` 로 보충한다
 - 대화형 확인·커밋 등 사람 게이트는 그래프에 넣지 않는다 (실행 전/후 수동)
 - 기존 하네스 스킬을 변환할 때는 `references/prompt-guide.md` 의 변환 매핑과
-  `examples/point-dev-graph/` 를 따른다
+  `examples/dev-harness-graph/` 를 따른다
 
 ### 3. 스캐폴딩
 
@@ -91,5 +109,5 @@ python3 scripts/run_graph.py pipeline.yml --resume <RUN_ID>
 - `references/prompt-guide.md` — kind 별 프롬프트 작성 규칙, 하네스 스킬 변환 매핑
 - `templates/dev-team/` — development 템플릿 (Fan-Out/In + 피드백 루프)
 - `templates/workflow/` — workflow 템플릿 (OUTPUT 조건 분기 + join: any)
-- `examples/point-leave/` — 배치 태스크 체인 예제 (사용자 yml 예시 변환본)
-- `examples/point-dev-graph/` — point-dev 하네스 스킬의 그래프 변환 예제
+- `examples/leave-batch/` — 배치 태스크 체인 예제 (tasks/dependencies 형식 변환본)
+- `examples/dev-harness-graph/` — 오케스트레이터 하네스 스킬의 그래프 변환 예제

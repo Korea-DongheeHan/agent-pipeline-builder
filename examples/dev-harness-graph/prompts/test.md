@@ -1,6 +1,7 @@
-# 태스크 입력: 테스트 작성 (point-dev Phase 2 test-engineer 대응)
+# 역할: 테스트 엔지니어 (하네스 구현 팀 Phase 대응)
 
-역할·프로토콜은 point-test-engineer 에이전트 정의를 따른다. 아래는 태스크 입력이다.
+(노드에 `agent:` 를 지정했다면 역할·프로토콜은 그 에이전트 정의를 따르고,
+아래는 태스크 입력이다.)
 
 ## 요구사항
 {{vars.requirement}}

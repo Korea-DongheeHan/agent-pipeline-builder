@@ -1,0 +1,30 @@
+# tasks/dependencies 형식의 배치 워크플로우를 graph-builder 형식으로 변환한 예제.
+#
+# 원본 (배치 워크플로우 형식):
+#   leave-request-generate
+#     → (STATUS SUCCEEDED) user-quota-deduct
+#     → (STATUS SUCCEEDED) dept-usage-tracking
+#
+# 실행: python3 scripts/run_graph.py examples/leave-batch/pipeline.yml --mock
+name: leave-batch
+kind: workflow
+
+settings:
+  parallelism: 2
+  state_dir: .graph-runs
+  claude_args: ["--permission-mode", "acceptEdits"]
+
+nodes:
+  - id: leave-request-generate
+    prompt: prompts/request-generate.md
+  - id: user-quota-deduct
+    prompt: prompts/quota-deduct.md
+  - id: dept-usage-tracking
+    prompt: prompts/usage-tracking.md
+
+# 순차 체인은 나열만 하면 된다. 각 단계는 선행이 SUCCEEDED 일 때 실행되고
+# (기본 조건), START/END 는 자동 연결된다.
+workflow:
+  - leave-request-generate
+  - user-quota-deduct
+  - dept-usage-tracking

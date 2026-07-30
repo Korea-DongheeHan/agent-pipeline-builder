@@ -15,33 +15,22 @@ vars:
 nodes:
   - id: architect
     prompt: prompts/architect.md
-  - id: impl-core          # Fan-Out: 도메인/코어 구현
+  - id: impl-core
     prompt: prompts/impl-core.md
-  - id: impl-api           # Fan-Out: API/어댑터 구현
+  - id: impl-api
     prompt: prompts/impl-api.md
-  - id: test               # Fan-In: 두 구현이 모두 끝나야 실행 (join: all 기본값)
+  - id: test
     prompt: prompts/test.md
   - id: review
     prompt: prompts/review.md
 
-edges:
-  - from: START
-    to: architect
-  - from: architect
-    to: [impl-core, impl-api]        # Fan-Out (병렬)
-  - from: impl-core
-    to: test
-  - from: impl-api
-    to: test                          # Fan-In (join: all)
-  - from: test
-    to: review
-  - from: test                        # 테스트 실패 → 구현 피드백 루프
-    to: [impl-core, impl-api]
-    when: FAILED
-    loop: {max: 3, on_exhausted: FAIL}
-  - from: review
-    to: END
-  - from: review                      # 리뷰 REQUEST_CHANGES → 구현 피드백 루프
-    to: [impl-core, impl-api]
-    when: FAILED
-    loop: {max: 3, on_exhausted: FAIL}
+# 워크플로우는 위에서 아래로 읽는다. START/END 는 자동 연결.
+workflow:
+  - architect
+  - loop:                              # test/review 실패 → 구현 재작업 (최대 3회)
+      max: 3
+      redo: [impl-core, impl-api]      # 실패 시 재실행할 노드
+      body:
+        - parallel: [impl-core, impl-api]   # Fan-Out — 다음 스텝(test)에서 Fan-In
+        - test
+        - review

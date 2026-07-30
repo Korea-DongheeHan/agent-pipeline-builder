@@ -10,9 +10,49 @@ kind: development        # development | workflow — 스캐폴딩 시 프롬프
 vars:                    # 프롬프트 변수. {{vars.KEY}} 로 치환. --var KEY=VALUE 가 덮어쓴다
   requirement: "..."
 settings: { ... }        # 아래 참조
-nodes: [ ... ]
-edges: [ ... ]
+nodes: [ ... ]           # 노드(에이전트) 정의
+workflow: [ ... ]        # 권장 — 중첩 블록 DSL (아래 참조)
+edges: [ ... ]           # 저수준 — 엣지 직접 정의 (workflow 와 병용 가능)
 ```
+
+## workflow — 중첩 블록 DSL (권장)
+
+워크플로우를 **위에서 아래로 읽히는 중첩 구조**로 쓴다. 러너가 내부적으로
+엣지로 컴파일한다. START/END 는 자동 연결된다 (첫 스텝 앞 START, 마지막
+스텝의 SUCCEEDED 뒤 END).
+
+```yaml
+workflow:
+  - analyst                            # 문자열 = 노드 순차 실행 (선행 SUCCEEDED 시)
+  - loop:                              # 피드백 루프 블록
+      max: 2                           # 판정별 최대 재작업 횟수
+      exhausted: [escalate, FAIL]      # 소진 시 경로: FAIL(기본) | 노드 | 시퀀스
+      redo: implement                  # 실패 시 재실행 노드(리스트 가능).
+                                       # 생략 시 body 첫 노드
+      body:
+        - parallel: [implement, test]  # Fan-Out. 항목 = 노드 | 시퀀스 | 중첩 블록
+        - qa                           # Fan-In — 병렬 갈래가 모두 끝나야 실행
+        - review
+  - branch:                            # 조건 분기 블록 (단일 선행 노드 뒤에만)
+      on: route                        # GRAPH_OUTPUT 키. 생략 시 케이스 키가
+      cases:                           # SUCCEEDED|FAILED|ALWAYS (STATUS 분기)
+        heavy: process-heavy           # 케이스 값 = 노드 | 시퀀스 (END/FAIL 터미널 허용)
+        light: [process-light]
+  - finalize                           # 분기 합류점 — 자동으로 join: any
+```
+
+블록 시맨틱:
+
+- **순차**: 리스트 순서대로. 각 연결의 기본 조건은 선행 SUCCEEDED.
+- **parallel**: 갈래를 동시에 실행. 다음 스텝은 모든 갈래 완료를 기다린다
+  (join: all). 갈래 안에 시퀀스·중첩 블록을 넣을 수 있다.
+- **loop**: `body` 안에서 **redo 스텝 이후의 노드가 FAILED** 를 보고하면
+  redo 노드로 피드백(재작업)한다. redo 스텝 이전(포함) 노드의 FAILED 는
+  파이프라인 실패다. `max` 초과 시 `exhausted` 경로로 위임한다.
+- **branch**: 선행 노드의 GRAPH_OUTPUT(`on` 키) 또는 STATUS 로 케이스를
+  고른다. 매칭되는 케이스가 없으면 데드락으로 파이프라인 실패 — 케이스를
+  전수 정의하라. 합류점(다음 스텝)은 자동으로 `join: any` 가 된다
+  (노드에 join 을 명시했으면 그 값을 존중).
 
 ## settings
 
@@ -35,9 +75,9 @@ nodes:
     prompt: prompts/review.md  # 필수. 스크립트 실행 위치(cwd) 기준 상대경로.
                                # 없으면 pipeline.yml 위치 기준으로 폴백
     model: opus                # 선택. 노드별 모델
-    agent: point-reviewer      # 선택. claude --agent — 실행 저장소의
+    agent: my-reviewer         # 선택. claude --agent — 실행 저장소의
                                # .claude/agents/<이름> 정의(모델·도구·시스템 프롬프트)를 사용
-    join: all                  # all(기본) | any — Fan-In 정책
+    join: all                  # all(기본) | any — Fan-In 정책 (workflow DSL 이 자동 설정)
     retry: 1                   # 선택. FAILED 시 즉시 재시도 횟수 (기본 0)
     allowed_tools: "Read Bash" # 선택. --allowedTools 로 전달
     context: [architect]       # 선택. 직접 선행이 아니어도 출력을 컨텍스트로 주입할 노드
@@ -46,34 +86,39 @@ nodes:
 ```
 
 - `join: all` — 모든 비-루프 인바운드 엣지가 도착해야 실행 (Fan-In 동기화)
-- `join: any` — 하나라도 도착하면 실행 (조건 분기 합류점에 사용)
+- `join: any` — 하나라도 도착하면 실행 (조건 분기 합류점)
 - **sticky 도착**: 한 번 충족된 선행 조건은 유지된다. 피드백 루프에서 실패한
   경로만 재실행돼도 Fan-In 노드는 (이전 도착 + 새 도착)으로 재트리거된다.
+  단, 업스트림이 아직 실행/대기 중이면 완료까지 기다렸다가 1회만 재실행한다.
 
-## edges
+## edges — 저수준 정의
+
+workflow DSL 로 표현하기 어려운 특수 위상이 필요할 때 쓴다. workflow 와
+병용하면 컴파일된 엣지에 더해진다.
 
 ```yaml
 edges:
   - from: review               # 노드 id | START | 리스트 (리스트 = 엣지 여러 개로 확장)
     to: [impl-a, impl-b]       # 노드 id | END | FAIL | 리스트 (리스트 = Fan-Out)
-    when: FAILED               # 조건 (아래 참조). 생략 시 STATUS==SUCCEEDED
+    when: FAILED               # 조건. 생략 시 STATUS==SUCCEEDED
     loop:                      # 이 엣지를 피드백(순환) 엣지로 선언
-      max: 3                   # 최대 발화 횟수
-      on_exhausted: escalate   # FAIL(기본, 파이프라인 실패) | 위임할 노드 id
+      max: 3
+      on_exhausted: escalate   # FAIL(기본) | 위임할 노드 id
 ```
 
 ### when 조건
 
-리스트로 쓰면 AND. 축약형: `when: SUCCEEDED` / `when: FAILED` / `when: ALWAYS`.
+리스트로 쓰면 AND. 문자열 축약형과 표현식을 지원한다:
 
 ```yaml
+when: FAILED                   # STATUS 축약형: SUCCEEDED | FAILED | ALWAYS
+when: route == heavy           # GRAPH_OUTPUT 표현식: == | != | in [a, b]
 when:
-  - type: STATUS               # 노드 종료 상태로 판정
-    status: SUCCEEDED          # SUCCEEDED | FAILED
-  - type: OUTPUT               # 노드가 보고한 GRAPH_OUTPUT 값으로 판정
+  - type: STATUS               # 명시형
+    status: SUCCEEDED
+  - type: OUTPUT
     key: route
     equals: heavy              # equals | not_equals | in: [a, b]
-  - type: ALWAYS               # 무조건 발화
 ```
 
 ### 그래프 규칙
@@ -90,7 +135,7 @@ when:
 러너가 모든 프롬프트 끝에 자동 주입한다 (프롬프트 파일에 다시 쓸 필요 없음):
 
 ```
-GRAPH_OUTPUT: {"key": "value"}   # 선택 — OUTPUT 조건 분기의 입력
+GRAPH_OUTPUT: {"key": "value"}   # 선택 — branch/OUTPUT 조건의 입력
 GRAPH_STATUS: SUCCEEDED          # 필수 — SUCCEEDED | FAILED
 ```
 

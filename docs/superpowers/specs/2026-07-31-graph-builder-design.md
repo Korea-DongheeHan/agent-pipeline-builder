@@ -64,9 +64,17 @@ graph-builder/
   references/prompt-guide.md # kind별 베이스 프롬프트 가이드
   templates/dev-team/      # development 템플릿 (yml + prompts)
   templates/workflow/      # workflow 템플릿 (yml + prompts)
-  examples/point-leave/    # 사용자 예시 yml의 변환본
+  examples/leave-batch/    # 사용자 예시 yml의 변환본
+  examples/dev-harness-graph/  # 오케스트레이터 하네스 스킬 변환 예제
   README.md
 ```
+
+## 추가 결정 (구현 중 사용자 피드백 반영)
+
+- 예제에 사내 프로젝트 고유 명칭을 쓰지 않는다 (일반화된 이름 사용).
+- 워크플로우 표기는 평면 엣지 나열이 아니라 **중첩 블록 DSL**(`workflow:` 의
+  parallel/loop/branch, START/END 자동 연결)을 권장 문법으로 하고, 러너가
+  엣지로 컴파일한다. 저수준 `edges:` 는 특수 위상용으로 유지.
 
 ## 테스트 계획 (--mock 기반)
 
