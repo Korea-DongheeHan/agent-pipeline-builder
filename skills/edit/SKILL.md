@@ -1,6 +1,6 @@
 ---
 name: edit
-description: 프로젝트에 설치된 그래프 파이프라인(개발 오케스트레이션)의 구성 변경 지원 스킬. "파이프라인에 노드/단계 추가", "루프 횟수·분기 조건 변경", "이 단계 빼줘", "에이전트 모델 바꿔", "파이프라인이 왜 실패했는지 봐줘" 등 .claude/skills/*/pipeline.yml 과 .claude/agents 를 수정·진단할 때 사용. 새 오케스트레이션 구축은 graph-builder:build.
+description: 설치된 그래프 파이프라인의 구성 변경과 진단 스킬. 노드나 에이전트의 추가와 제거, 분기·루프·판정 기준 조정, 파이프라인 실행 실패의 원인 분석에 사용한다. 새 오케스트레이션 구축은 graph-builder:build 가 담당한다.
 ---
 
 # graph-builder:edit — 파이프라인 구성 변경·진단
