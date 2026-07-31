@@ -625,6 +625,7 @@ class Pipeline:
                 self.nodes[nid]["join"] = "any"
 
         self.edges = []
+        seen_sig = set()  # 완전 동일 엣지 중복 제거 (loop 중복은 카운터가 2배가 되므로 실해악)
         for i, ed in enumerate(raw_edges):
             if not isinstance(ed, dict):
                 raise PipelineError("엣지 형식 오류: %r" % ed)
@@ -643,6 +644,10 @@ class Pipeline:
                 }
             for s in srcs:
                 for t in dsts:
+                    sig = json.dumps([s, t, when, loop], ensure_ascii=False, sort_keys=True)
+                    if sig in seen_sig:
+                        continue
+                    seen_sig.add(sig)
                     self.edges.append(
                         {
                             "key": "%s->%s#%d" % (s, t, i),
