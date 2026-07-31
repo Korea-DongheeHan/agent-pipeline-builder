@@ -20,10 +20,10 @@
 
 ## 스킬 대비 의도적으로 다른 것 (headless 제약)
 
-- **대화형 스펙 게이트(AskUserQuestion) 없음** — headless 실행은 사용자에게
-  질문할 수 없다. analyst 가 가정을 문서화하고, 사용자는 실행 후 가정을 검토한다.
-  스펙 확정이 중요한 작업이면 그래프 실행 **전에** 대화형으로 스펙을 확정하고
-  `--var requirement=` 에 확정 스펙을 넣어라.
+- **이 예제에는 스펙 게이트가 없다** — 스펙 확정이 필요하면 `gate: true`
+  노드를 analyst 뒤에 넣어라 (`templates/pipeline-skill/` 이 기본 포함:
+  게이트에서 일시정지 → AskUserQuestion 스펙 확정 → `--resume` + `--var
+  decisions=` 재개).
 - **팀 실시간 통신(SendMessage) 없음** — incremental QA 의 실시간 왕복 대신
   그래프 엣지(FAILED 피드백 루프)로 결함이 순환한다. 왕복 지연이 커지는 대신
   구조가 결정적(deterministic)이고 재현 가능하다.

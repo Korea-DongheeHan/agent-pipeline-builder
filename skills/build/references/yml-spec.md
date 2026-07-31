@@ -95,8 +95,13 @@ workflow:
 
 ```yaml
 nodes:
+  - id: spec-gate
+    gate: true                 # 게이트 노드: 도달 시 파이프라인 일시정지(PAUSED, exit 3).
+                               # 오케스트레이터가 사람 확인(예: AskUserQuestion 스펙 확정)
+                               # 후 --resume 으로 통과시킨다 (--var 로 확정 값 주입 가능).
+                               # prompt 불필요, 에이전트 실행 없음
   - id: review                 # 필수, 고유. START/END/FAIL 은 예약어
-    prompt: prompts/review.md  # 필수. 스크립트 실행 위치(cwd) 기준 상대경로.
+    prompt: prompts/review.md  # 필수(게이트 제외). 스크립트 실행 위치(cwd) 기준 상대경로.
                                # 없으면 pipeline.yml 위치 기준으로 폴백
     model: opus                # 선택. 노드별 모델
     agent: my-reviewer         # 선택. claude --agent — 실행 저장소의
@@ -190,7 +195,8 @@ python3 scripts/run_graph.py pipeline.yml            # 실행
   --var KEY=VALUE                                    # 프롬프트 변수 주입
 ```
 
-종료 코드: 성공 0, 실패 1, 로드/검증 실패 2.
+종료 코드: 성공 0, 실패 1, 로드/검증 실패 2, **게이트 일시정지 3** (PAUSED —
+선행 산출물 검토·확정 후 `--resume`, 필요 시 `--var` 로 확정 값 주입).
 
 ## 실행 산출물
 

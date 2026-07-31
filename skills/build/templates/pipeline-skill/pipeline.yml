@@ -1,0 +1,63 @@
+# {{project_name}} 개발 오케스트레이션 파이프라인
+#
+# 흐름: 분석 → [스펙 게이트 ⏸] → (구현 ‖ 테스트 작성) → QA(Fan-In) → 리뷰
+#       QA/리뷰 실패 → 구현 재작업 수렴 루프(max 2) → 소진 시 에스컬레이션 보고
+#
+# 스펙 게이트(SDD): analyst 가 스펙 초안과 확정 질문을 만들면 파이프라인이
+# 일시정지(exit 3)한다. 오케스트레이터(Claude)가 AskUserQuestion 으로 스펙을
+# 확정한 뒤 --resume + --var decisions="확정 요약" 으로 재개한다.
+#
+# 문법 요약 (전체 스펙: graph-builder 플러그인 references/yml-spec.md):
+#   - 노드 나열 = 순차 (START/END 자동 연결)
+#   - parallel: [a, b] = Fan-Out, 다음 스텝에서 Fan-In
+#   - 노드에 {if, goto, max, exhausted} 부착 = 상태 체크 점프
+#     (이미 나온 노드로 goto = 피드백 루프)
+#   - branch: {on: 출력키, cases: ...} = 다중 케이스 분기
+name: "{{pipeline_name}}"
+kind: development
+
+settings:
+  parallelism: 4
+  state_dir: .graph-runs
+  claude_args: ["--permission-mode", "acceptEdits"]
+  node_timeout: 3600
+
+vars:
+  requirement: "구현할 요구사항을 --var requirement=... 로 주입하라"
+  decisions: "(스펙 게이트 미확정 — analyst 스펙 초안의 가정을 따른다)"
+
+nodes:
+  - id: analyst
+    agent: "{{prefix}}-analyst"          # .claude/agents/ 의 역할 정의 사용
+    prompt: prompts/analyst.md
+  - id: spec-gate
+    gate: true                         # SDD 스펙 확정 게이트 — 여기서 일시정지
+  - id: implement
+    agent: "{{prefix}}-implementer"
+    prompt: prompts/implement.md
+  - id: test
+    agent: "{{prefix}}-test-engineer"
+    prompt: prompts/test.md
+  - id: qa
+    agent: "{{prefix}}-qa"
+    prompt: prompts/qa.md
+  - id: review
+    agent: "{{prefix}}-reviewer"
+    prompt: prompts/review.md
+  - id: escalate
+    prompt: prompts/escalate.md        # 전용 에이전트 불필요 — 보고서 작성만
+
+workflow:
+  - analyst
+  - spec-gate                          # ⏸ 스펙 확정 전에는 구현을 시작하지 않는다
+  - parallel: [implement, test]        # Fan-Out — qa 에서 Fan-In
+  - qa:
+      if: FAILED                       # acceptance FAIL → 구현 재작업
+      goto: implement
+      max: 2
+      exhausted: [escalate, FAIL]      # 반복 실패 → 보고 후 의도적 실패 종결
+  - review:
+      if: FAILED                       # REQUEST_CHANGES → 재작업
+      goto: implement
+      max: 2
+      exhausted: [escalate, FAIL]

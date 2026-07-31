@@ -603,6 +603,7 @@ class Pipeline:
                 explicit_join.add(nid)
             self.nodes[nid] = {
                 "id": nid,
+                "gate": bool(nd.get("gate")),  # 게이트: 도달 시 일시정지, resume 으로 통과
                 "prompt": nd.get("prompt"),
                 "model": nd.get("model") or self.settings["model"],
                 "agent": nd.get("agent"),  # claude --agent (프로젝트 .claude/agents 정의)
@@ -701,6 +702,8 @@ class Pipeline:
         for nid, nd in self.nodes.items():
             if nd["join"] not in ("all", "any"):
                 errors.append("노드 %s: join 은 all|any" % nid)
+            if nd["gate"]:
+                continue  # 게이트 노드는 prompt 불필요
             if not nd["prompt"]:
                 errors.append("노드 %s: prompt 가 필요하다" % nid)
             elif self.resolve_prompt(nd["prompt"]) is None:
@@ -824,6 +827,7 @@ class Runner:
         self.live = set()  # resume 시 캐시를 쓰면 안 되는(재실행 필요) 노드
         self.futures = {}
         self.end_reached = False
+        self.paused_at = None  # 게이트 일시정지
         self.fail_reason = None
         self.steps = 0
         self.lock = threading.Lock()
@@ -873,18 +877,22 @@ class Runner:
         finally:
             self.pool.shutdown(wait=True)
 
-        ok = self.end_reached and not self.fail_reason
-        if not ok and not self.fail_reason:
-            waiting = {
-                n: sorted(self.required[n] - self.ever_arrived[n])
-                for n in self.pipe.nodes
-                if self.ever_arrived[n] and self.required[n] - self.ever_arrived[n]
-            }
-            self.fail_reason = (
-                "END 미도달 상태로 실행할 노드가 없다 (데드락). 대기 중: %s"
-                % (json.dumps(waiting, ensure_ascii=False) if waiting else "없음")
-            )
-        result = "SUCCEEDED" if ok else "FAILED"
+        if self.end_reached and not self.fail_reason:
+            result = "SUCCEEDED"
+        elif self.paused_at and not self.fail_reason:
+            result = "PAUSED"
+        else:
+            if not self.fail_reason:
+                waiting = {
+                    n: sorted(self.required[n] - self.ever_arrived[n])
+                    for n in self.pipe.nodes
+                    if self.ever_arrived[n] and self.required[n] - self.ever_arrived[n]
+                }
+                self.fail_reason = (
+                    "END 미도달 상태로 실행할 노드가 없다 (데드락). 대기 중: %s"
+                    % (json.dumps(waiting, ensure_ascii=False) if waiting else "없음")
+                )
+            result = "FAILED"
         self.save_state(result)
         self.log("─" * 60)
         for n in self.pipe.nodes:
@@ -894,13 +902,18 @@ class Runner:
                 % (n, "%s (iter %d)" % (r["status"], r["iteration"]) if r else "미실행")
             )
         self.log("─" * 60)
-        if ok:
+        if result == "SUCCEEDED":
             self.log("✔ 파이프라인 SUCCEEDED — 산출물: %s" % self.run_dir)
+        elif result == "PAUSED":
+            self.log("⏸ 파이프라인 PAUSED — 게이트 '%s' 에서 확인 대기" % self.paused_at)
+            self.log("  선행 산출물 검토: %s/outputs/" % self.run_dir)
+            self.log("  확인 후 재개: python3 %s %s --resume %s [--var key=확정값 ...]"
+                     % (sys.argv[0], self.pipe.yml_path, self.run_id))
         else:
             self.log("✘ 파이프라인 FAILED — %s" % self.fail_reason)
             self.log("  재개: python3 %s %s --resume %s"
                      % (sys.argv[0], self.pipe.yml_path, self.run_id))
-        return ok
+        return result
 
     # ---- 완료 처리 (메인 스레드 전용) ----
     def _on_complete(self, node, status, outputs, text):
@@ -942,7 +955,7 @@ class Runner:
 
     def _deliver(self, e):
         """엣지 발화를 기록만 한다. 활성화 판단은 _schedule 이 일괄 수행."""
-        if self.fail_reason or self.end_reached:
+        if self.fail_reason or self.end_reached or self.paused_at:
             return
         dst = e["dst"]
         if dst == END:
@@ -971,10 +984,15 @@ class Runner:
         아직 활동 중이면 대기한다 — 피드백 웨이브에서 업스트림 일부만 끝난
         시점에 조기 재실행되는 것을 막는다.
         """
-        if self.fail_reason or self.end_reached:
+        if self.fail_reason or self.end_reached or self.paused_at:
             return
         progressed = True
-        while progressed and not self.fail_reason and not self.end_reached:
+        while (
+            progressed
+            and not self.fail_reason
+            and not self.end_reached
+            and not self.paused_at
+        ):
             progressed = False
             for dst in list(self.pipe.nodes):
                 if not self.arrived[dst] or dst in self.futures.values():
@@ -1005,6 +1023,24 @@ class Runner:
         self.arrived[node].clear()
         self.iteration[node] += 1
         it = self.iteration[node]
+        # 게이트: 처음 도달하면 일시정지, resume 시(사람/오케스트레이터 확인 후) 통과
+        if self.pipe.nodes[node]["gate"]:
+            record = {
+                "outputs": {},
+                "text": "",
+                "output_file": None,
+                "iteration": it,
+            }
+            prev = self.prev_nodes.get(node)
+            if prev and prev.get("status") in ("PAUSED", "SUCCEEDED") and it == 1:
+                self.log("⏩ 게이트 %s 통과 (이전 실행에서 확인됨)" % node)
+                self.results[node] = dict(record, status="SUCCEEDED")
+                self._on_complete(node, "SUCCEEDED", {}, "")
+                return
+            self.log("⏸ 게이트 %s 도달 — 일시정지" % node)
+            self.results[node] = dict(record, status="PAUSED")
+            self.paused_at = node
+            return
         # resume 캐시: 이전 실행에서 SUCCEEDED 였고 업스트림이 변하지 않았으면 재사용
         prev = self.prev_nodes.get(node)
         if (
@@ -1218,7 +1254,10 @@ def mermaid(pipe):
     if any(e["dst"] == FAIL for e in pipe.edges):
         lines.append("  F([FAIL])")
     for n in pipe.nodes:
-        lines.append('  %s["%s"]' % (safe[n], n))
+        if pipe.nodes[n]["gate"]:
+            lines.append('  %s[["%s ⏸"]]' % (safe[n], n))
+        else:
+            lines.append('  %s["%s"]' % (safe[n], n))
     for e in pipe.edges:
         label = _cond_label(e)
         if e["loop"]:
@@ -1345,7 +1384,9 @@ def main(argv=None):
         return 0
 
     runner = Runner(pipe, args)
-    return 0 if runner.run() else 1
+    result = runner.run()
+    # 종료 코드: 0 성공, 1 실패, 2 로드/검증 오류, 3 게이트 일시정지
+    return {"SUCCEEDED": 0, "PAUSED": 3}.get(result, 1)
 
 
 if __name__ == "__main__":

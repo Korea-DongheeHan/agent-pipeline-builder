@@ -1,115 +1,105 @@
 ---
 name: build
-description: 멀티 에이전트 그래프 파이프라인(하네스) 빌더 메타 스킬. 사용자가 에이전트 팀/파이프라인/워크플로우/오케스트레이션을 만들고 싶다고 하거나, 개발 파이프라인(설계→구현→테스트→리뷰)·배치 태스크 체인을 yml 로 구성하고 싶을 때, 기존 하네스 스킬을 그래프로 변환할 때 사용. 산출물은 프로젝트 .claude/skills/ 에 독자 실행 하네스로 생성된다.
+description: 개발 오케스트레이션 구성 메타 스킬. 사용자가 "개발 오케스트레이션/에이전트 팀/파이프라인/워크플로우 구성해줘", "하네스 만들어줘" 라고 하거나 개발 파이프라인(분석→구현→테스트→QA→리뷰)·배치 태스크 체인을 프로젝트에 구축하고 싶을 때 사용. 산출물: 프로젝트의 CLAUDE.md 트리거 + .claude/skills/<파이프라인> 오케스트레이션 스킬(yml+러너) + .claude/agents 에이전트 정의. 이미 설치된 파이프라인의 변경은 graph-builder:edit.
 ---
 
-# graph-builder — 그래프 파이프라인 하네스 빌더
+# graph-builder:build — 개발 오케스트레이션 구성
 
-**빌더(이 스킬) → 산출물(프로젝트 하네스)** 구조다. 이 스킬은 파이프라인을
-**만들 때만** 쓰이고, 만들어진 하네스는 대상 프로젝트의
-`.claude/skills/<파이프라인명>/` 에서 **graph-builder 없이 독자적으로 실행**된다.
+도메인 설명 한 문장에서 **프로젝트에서 독자적으로 동작하는 개발 오케스트레이션**을
+만든다. 이 스킬은 구성할 때만 쓰이고, 산출물은 플러그인 없이 실행된다.
 
-사용자는 pipeline.yml + prompts/*.md 만 관리하면 되고, 실행·상태 관리·분기·
-병렬·루프는 러너(`scripts/run_graph.py`)의 몫이다 (스펙: `references/yml-spec.md`).
-
-## 절차
-
-### 1. 요구 파악
-
-파이프라인의 성격(개발 협업형 / 배치 절차형)과 역할(노드)·흐름(순서·분기·루프)을
-요구사항에서 도출한다. 성격은 템플릿 분기가 아니라 **프롬프트 작성 방식**에만
-반영한다 (`references/prompt-guide.md` 의 kind 별 규칙). 애매하면 AskUserQuestion.
-
-### 2. 그래프 설계 (사용자 확인)
-
-흐름은 **중첩 workflow DSL** 로 쓴다 — 위에서 아래로 읽히고 START/END 자동 연결:
-
-```yaml
-workflow:
-  - analyst
-  - parallel: [implement, test]     # Fan-Out → 다음 스텝에서 Fan-In
-  - qa:
-      if: FAILED                    # 이 노드의 상태 체크. 이미 나온 노드로 goto = 피드백 루프
-      goto: implement
-      max: 2
-      exhausted: [escalate, FAIL]   # 소진 → 보고 후 의도적 실패 종결
-  - review:
-      if: FAILED
-      goto: implement
-      max: 2
-```
-
-설계 원칙:
-
-- 단순 상태 체크·재작업 루프는 `if/goto` (권장 — 가장 읽기 쉽다),
-  값 기반 다중 케이스는 `branch: {on: 키, cases: ...}`,
-  루프 범위·소진 경로가 복잡하면 `loop:` 블록
-- 조건 분기의 합류점은 `join: any` 를 명시한다 (branch/앞으로 goto 대상은 자동)
-- 특수 위상만 저수준 `edges:` 로 보충
-- 대화형 확인·커밋 등 사람 게이트는 그래프에 넣지 않는다 (실행 전/후 수동)
-- 기존 하네스 스킬 변환은 `references/prompt-guide.md` 매핑과
-  `examples/dev-harness-graph/` 를 따른다
-
-`--mermaid` 출력을 코드블록으로 사용자에게 보여주고 구조를 확인받는다.
-
-### 3. 하네스 스캐폴딩 (대상: 프로젝트 `.claude/skills/<파이프라인명>/`)
+## 산출물 구조 (최종 output — 이 구조를 반드시 완성한다)
 
 ```
-<project>/.claude/skills/<파이프라인명>/
-  SKILL.md                    # templates/pipeline-skill.md 기반 — 트리거·실행 절차
-  pipeline.yml                # templates/dev-team/pipeline.yml 기반 설계 반영
-  prompts/*.md                # templates/dev-team/prompts/ + prompt-guide.md 규칙
-  scripts/run_graph.py        # 러너 그대로 복사 (수정 금지 — 독립 실행 보장)
-  references/session-mode.md  # 세션 모드 해석 규칙 복사
+<project>/
+  CLAUDE.md                              # ① 개발 요청 시 오케스트레이션 사용 명시
+  .claude/
+    skills/<파이프라인명>/                # ② 메인 오케스트레이션 스킬 (기본명: pipeline-skill)
+      SKILL.md                           #    실행 절차 (러너/세션 모드)
+      pipeline.yml                       #    흐름 SSOT — 사용자가 yml 로 추가·변경
+      prompts/*.md                       #    노드별 태스크 입력·판정 기준
+      scripts/run_graph.py               #    세션을 수행하는 실행 엔진 (복사본)
+      references/session-mode.md         #    트리 UI 모드 해석 규칙 (복사본)
+    agents/<prefix>-*.md                 # ③ 에이전트 구성 (역할·모델·도구)
 ```
 
-프롬프트 규칙: 상태 보고 문법은 러너가 자동 주입하므로 **판정 기준과
-GRAPH_OUTPUT 키 규약**만 쓴다. 실행 저장소에 전용 에이전트 정의(.claude/agents)가
-있으면 노드 `agent:` 필드로 재사용하고 프롬프트에는 태스크 입력만 쓴다.
+역할 분담: **흐름 = yml, 역할 = agents, 태스크 입력 = prompts** — 상세 기준은
+`references/agent-guide.md`. 같은 내용을 두 곳에 쓰지 않는다.
 
-### 4. CLAUDE.md 등록 (필수)
+## Phase 1: 프로젝트 분석
 
-프로젝트 ROOT 의 CLAUDE.md 에 트리거 블록을 추가한다 (없으면 생성).
-이미 같은 마커 블록이 있으면 교체한다:
+스캐폴딩 전에 프로젝트 사실을 수집한다 (에이전트 플레이스홀더의 입력):
+
+- 기술 스택, 빌드·테스트 실제 명령 (README/빌드 파일에서 확인, 추측 금지)
+- 레이어 구조·의존 방향·컨벤션 (CLAUDE.md, 컨벤션 문서, 코드 샘플)
+- **기존 `.claude/agents/` 확인** — 역할이 겹치는 정의가 있으면 재사용 대상
+- 기존 CLAUDE.md 존재 여부와 이미 등록된 graph-builder 마커 블록
+
+## Phase 2: 팀 설계 (사용자 확인 게이트)
+
+`references/team-patterns.md` 의 패턴에서 출발해 노드·에이전트·흐름을 설계한다.
+**표준 기능 개발 요청이면 기본 템플릿을 그대로 쓰는 것이 기본값이다** —
+분석 → **SDD 스펙 게이트(⏸ AskUserQuestion 확정)** → 구현‖테스트 → QA →
+리뷰 + 수렴 루프. 요구가 다를 때만 변형하며, 사람 확인이 필요한 지점에는
+`gate: true` 노드를 쓴다.
+
+사용자에게 확인받을 것: ① 노드/에이전트 표(역할·모델) ② 흐름 mermaid
+(pipeline.yml 초안으로 `--mermaid` 생성) ③ 파이프라인명(기본 `pipeline-skill`)과
+에이전트 접두어(기본: 프로젝트 슬러그).
+
+## Phase 3: 에이전트 정의 생성 (`.claude/agents/`)
+
+`templates/agents/*.md` 를 복사해 `<prefix>-<역할>.md` 로 만들고, Phase 1 의
+사실로 **모든 플레이스홀더를 치환**한다 (규칙: `references/agent-guide.md`).
+기존 에이전트가 있으면 생성 대신 재사용하고 yml 의 `agent:` 만 맞춘다.
+
+## Phase 4: 오케스트레이션 스킬 생성 (`.claude/skills/<파이프라인명>/`)
+
+`templates/pipeline-skill/` 전체를 복사한 뒤:
+
+1. `SKILL.md`·`pipeline.yml`·`prompts/*.md` 의 플레이스홀더
+   (`{{pipeline_name}}`, `{{prefix}}`, `{{project_name}}`)를 치환한다
+2. Phase 2 설계가 기본 템플릿과 다르면 workflow·nodes·prompts 를 조정한다
+   (DSL 스펙: `references/yml-spec.md`, 프롬프트 규칙: `references/prompt-guide.md`)
+3. 이 스킬의 `scripts/run_graph.py` 와 `references/session-mode.md` 를
+   그대로 복사한다 (러너 수정 금지 — 독립 실행 보장)
+
+## Phase 5: CLAUDE.md 등록 (필수)
+
+프로젝트 ROOT 의 CLAUDE.md 에 트리거 블록을 추가한다 (없으면 생성,
+같은 마커가 있으면 교체):
 
 ```markdown
 <!-- graph-builder:<파이프라인명> start -->
-## 그래프 파이프라인: <파이프라인명>
-<트리거 조건 — 예: 개발·기능 수정 요구사항> 요청 시
-`.claude/skills/<파이프라인명>` 스킬(그래프 파이프라인 하네스)을 사용해 수행하라.
+## 개발 오케스트레이션: <파이프라인명>
+개발·기능 수정·테스트 보강·리뷰 요구사항 요청 시
+`.claude/skills/<파이프라인명>` 스킬(개발 오케스트레이션)을 사용해 수행하라.
 단일 파일 수준의 얇은 변경은 직접 수행한다.
 <!-- graph-builder:<파이프라인명> end -->
 ```
 
-### 5. 검증 (필수 — 건너뛰지 마라)
+## Phase 6: 검증·인계 (필수 — 건너뛰지 마라)
 
 ```bash
-python3 .claude/skills/<이름>/scripts/run_graph.py .claude/skills/<이름>/pipeline.yml --validate
-python3 .claude/skills/<이름>/scripts/run_graph.py .claude/skills/<이름>/pipeline.yml --dry-run
-# 분기·루프 경로 검증 (claude 호출 없음):
-python3 ... --mock --mock-status review=FAILED,SUCCEEDED
-python3 ... --mock --mock-output 'prepare={"route": "light"}'
+PL=.claude/skills/<파이프라인명>
+python3 $PL/scripts/run_graph.py $PL/pipeline.yml --validate
+python3 $PL/scripts/run_graph.py $PL/pipeline.yml --mock          # 스펙 게이트 PAUSED(exit 3) 확인
+python3 $PL/scripts/run_graph.py $PL/pipeline.yml --mock \
+  --resume <RUN_ID> --mock-status qa=FAILED,SUCCEEDED             # 게이트 통과 + 수렴 루프 확인
+grep -rn "{{" $PL .claude/agents/<prefix>-*.md   # 플레이스홀더 잔존 = 미완성
 ```
 
-### 6. 인계 보고
-
-사용자에게 보고한다:
-
-- 생성된 하네스 위치·구조와 CLAUDE.md 등록 내용
-- **비용 특성 (필수 고지)**: 노드 1회 실행 = claude 세션 1개. 노드 수 × 루프
-  상한 기준 최대 세션 수를 알린다
-- **실행 모드 2가지**: 러너 모드(기본 — 결정적·상태저장·resume, 콘솔 로그) /
-  세션 모드(트리 UI 관찰 — 하네스의 references/session-mode.md)
-- **컨텍스트 격리**: 각 노드는 독립 세션(빈 컨텍스트 시작), 노드 간 전달은
-  선행 출력 요약 + 파일 경로뿐 (bounded handoff)
-- permission-mode 정책(`settings.claude_args`, 기본 acceptEdits) 확인
+인계 보고에 포함: 생성 파일 트리, CLAUDE.md 등록 내용, **비용 특성**(노드
+1회 = claude 세션 1개, 최대 세션 수 추정), 실행 모드 2가지(러너=결정적·resume /
+세션=트리 UI 관찰), 컨텍스트 격리 특성, permission-mode 확인, 이후 구성 변경은
+`graph-builder:edit` 사용 안내.
 
 ## 참조
 
+- `references/team-patterns.md` — 팀 아키텍처 패턴 ↔ 그래프 DSL 대응
+- `references/agent-guide.md` — 에이전트 정의 작성·치환 규칙
 - `references/yml-spec.md` — pipeline.yml 전체 스키마·DSL·CLI
-- `references/prompt-guide.md` — 성격별 프롬프트 작성 규칙, 하네스 변환 매핑
+- `references/prompt-guide.md` — 프롬프트 작성 규칙, 기존 하네스 변환 매핑
 - `references/session-mode.md` — 세션 오케스트레이션(트리 UI) 해석 규칙
-- `templates/dev-team/` — 기본 파이프라인 템플릿 (병렬 + if/goto 루프)
-- `templates/pipeline-skill.md` — 생성될 파이프라인 스킬(SKILL.md) 템플릿
-- `examples/leave-batch/` — 배치 태스크 체인 예제
-- `examples/dev-harness-graph/` — 오케스트레이터 하네스 스킬의 그래프 변환 예제
+- `templates/pipeline-skill/` — 산출물 스킬 골격 / `templates/agents/` — 에이전트 골격
+- `examples/` — leave-batch(배치 체인), dev-harness-graph(하네스 변환)
