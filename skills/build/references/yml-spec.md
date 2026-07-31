@@ -82,6 +82,7 @@ workflow:
 
 | 키 | 기본값 | 설명 |
 |---|---|---|
+| `lang` | `en` | 실행 로그·프롬프트 주입 문구 언어 (`en` \| `ko`). 상태 마커·종료 코드는 언어 무관 |
 | `mode` | `runner` | 기본 실행 모드 선언. `runner` = run_graph.py 실행(결정적·resume), `session` = Claude 가 Agent 툴로 해석 실행(관찰·개입). 산출물 SKILL.md 가 이 값을 기본으로 따르고, 사용자가 실행 시 오버라이드 가능 |
 | `parallelism` | 4 | 동시에 실행할 최대 노드 수 |
 | `state_dir` | `.graph-runs` | 실행 상태·산출물 저장 위치 |

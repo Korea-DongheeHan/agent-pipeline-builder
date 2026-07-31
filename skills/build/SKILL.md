@@ -70,7 +70,10 @@ description: 멀티 에이전트 개발 오케스트레이션을 프로젝트에
 러너(권장: 무인·결정적·resume·오케스트레이션 비용 0) vs
 세션(서브에이전트 화면 실시간 관찰·개입 가능, resume 없음·메인 세션 오버헤드).
 선택은 산출물 pipeline.yml 의 `settings.mode` 에 기록되고, 실행 시마다
-말로 오버라이드할 수 있음을 함께 안내한다.
+말로 오버라이드할 수 있음을 함께 안내한다. ⑤ **산출물 언어** — 프로젝트
+문서의 주 언어를 감지해 기본값으로 제안한다(en | ko). 러너 로그는
+`settings.lang` 으로 바뀌고, SKILL.md·프롬프트·에이전트 정의도 이 언어로
+생성한다.
 
 ## Phase 3: 에이전트 정의 생성 (`.claude/agents/`)
 
@@ -83,7 +86,10 @@ description: 멀티 에이전트 개발 오케스트레이션을 프로젝트에
 `templates/pipeline-dev/` 전체를 복사한 뒤:
 
 1. `SKILL.md`·`pipeline.yml`·`prompts/*.md` 의 플레이스홀더
-   (`{{pipeline_name}}`, `{{prefix}}`, `{{project_name}}`)를 치환한다.
+   (`{{pipeline_name}}`, `{{prefix}}`, `{{project_name}}`)를 치환하고,
+   pipeline.yml 의 `settings.lang` 을 Phase 2 에서 선택한 언어로 설정한다.
+   산출물 언어가 한국어가 아니면 템플릿(한국어 원본)의 SKILL.md·프롬프트·
+   에이전트 정의 본문을 선택 언어로 번역해 생성한다.
    산출물 SKILL.md 의 description 은 **구체적 트리거 상황 + 후속 작업
    키워드(재실행·수정·보완·피드백 반영)** 를 포함해야 한다 — 템플릿 기본값을
    프로젝트 용어로 다듬는다

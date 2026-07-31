@@ -17,6 +17,7 @@ name: "{{pipeline_name}}"
 kind: development
 
 settings:
+  lang: ko               # 실행 로그·프롬프트 주입 문구 언어 (en | ko) — 스캐폴딩 시 선택 언어로 설정
   mode: runner           # 기본 실행 모드. runner = 스크립트 실행(결정적·resume·무인)
                          #                session = Claude 가 Agent 툴로 실행(트리 UI 관찰·개입)
                          # 실행 시 "세션 모드로" / "러너 모드로" 요청으로 오버라이드 가능

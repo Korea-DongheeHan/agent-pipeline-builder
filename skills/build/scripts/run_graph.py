@@ -38,6 +38,106 @@ START, END, FAIL = "START", "END", "FAIL"
 STATUS_RE = re.compile(r"GRAPH_STATUS:\s*(SUCCEEDED|FAILED)", re.IGNORECASE)
 OUTPUT_RE = re.compile(r"GRAPH_OUTPUT:\s*(\{.*\})")
 
+# ---------------------------------------------------------------------------
+# 메시지 카탈로그 — settings.lang(en|ko)으로 실행 로그와 프롬프트 주입 문구를 고른다.
+# 상태 마커(GRAPH_STATUS 등)와 종료 코드는 언어와 무관하다.
+# ---------------------------------------------------------------------------
+MESSAGES = {
+    "en": {
+        "start": "▶ pipeline '%s' started — run_id=%s%s",
+        "mock": " (mock)",
+        "session_note": "ℹ settings.mode is 'session' but running via the runner"
+                        " (session mode is interpreted by Claude with the Agent tool)",
+        "cache": "⏩ %s reused from cache (SUCCEEDED in a previous run)",
+        "gate_pass": "⏩ gate %s passed (confirmed in a previous run)",
+        "gate_pause": "⏸ gate %s reached — paused",
+        "node_start": "▶ %s started (iter %d)",
+        "node_end": "%s %s %s (iter %d)",
+        "feedback": "↻ feedback %s → %s (%d/%d)",
+        "delegate": "⚠ loop exhausted %s → delegated to node '%s'",
+        "retry": "↺ %s failed, retrying %d/%d",
+        "no_marker": "⚠ missing GRAPH_STATUS marker — exit 0, assuming SUCCEEDED",
+        "dead_end": "⚠ no matching edge after %s SUCCEEDED (path ends)",
+        "end": "● END reached",
+        "fail_route": "node %s routed to the FAIL terminal (%s)",
+        "exhaust_done": "loop exhaustion handled — '%s' finished its report;"
+                        " failing the pipeline (see its output)",
+        "fail_no_edge": "node %s FAILED — no edge handles the failure",
+        "loop_out": "feedback loop exhausted: %s (max %d exceeded)",
+        "max_steps": "max_total_steps(%s) exceeded — aborted by the runaway guard",
+        "deadlock": "no runnable node and END not reached (deadlock). waiting on: %s",
+        "none": "none",
+        "not_run": "not run",
+        "ok": "✔ pipeline SUCCEEDED — artifacts: %s",
+        "paused": "⏸ pipeline PAUSED — waiting at gate '%s'",
+        "paused_review": "  review upstream outputs: %s/outputs/",
+        "paused_resume": "  resume after confirming: python3 %s %s --resume %s [--var key=value ...]",
+        "failed": "✘ pipeline FAILED — %s",
+        "resume_hint": "  resume: python3 %s %s --resume %s",
+        "timeout": "node timed out (over %ss)",
+        "no_cli": "claude CLI not found: %s",
+        "internal": "runner internal error: %r",
+        "mock_text": "[MOCK] %s iter %d result",
+        "ctx_header": "---\n## Upstream node outputs (context)\n\n",
+        "ctx_item": "### upstream `%s` — %s (iter %d)\nfull output file: %s\n\n%s",
+        "ctx_trunc": "\n...(truncated — see the full output file)",
+        "protocol": "---\n"
+                    "## Execution protocol (mandatory)\n"
+                    "This is pipeline '%s'; you are its node `%s` (iteration %d, run_id=%s).\n"
+                    "When your work is done, report on the very last line:\n\n"
+                    "GRAPH_STATUS: SUCCEEDED   (success)  or  GRAPH_STATUS: FAILED   (failure)\n\n"
+                    "If downstream routing needs values, put a one-line JSON right above it:\n\n"
+                    "GRAPH_OUTPUT: {\"key\": \"value\"}\n",
+        "validated": "validation passed: %d nodes, %d edges (%s)",
+    },
+    "ko": {
+        "start": "▶ 파이프라인 '%s' 시작 — run_id=%s%s",
+        "mock": " (mock)",
+        "session_note": "ℹ settings.mode 는 session 이지만 러너로 실행한다"
+                        " (세션 모드는 Claude 가 Agent 툴로 해석 실행)",
+        "cache": "⏩ %s 캐시 재사용 (이전 실행 SUCCEEDED)",
+        "gate_pass": "⏩ 게이트 %s 통과 (이전 실행에서 확인됨)",
+        "gate_pause": "⏸ 게이트 %s 도달 — 일시정지",
+        "node_start": "▶ %s 시작 (iter %d)",
+        "node_end": "%s %s %s (iter %d)",
+        "feedback": "↻ 피드백 %s → %s (%d/%d)",
+        "delegate": "⚠ 루프 소진 %s → '%s' 노드로 위임",
+        "retry": "↺ %s 실패, 재시도 %d/%d",
+        "no_marker": "⚠ GRAPH_STATUS 마커가 없다 — exit 0 이므로 SUCCEEDED 로 간주",
+        "dead_end": "⚠ %s SUCCEEDED 이후 매칭되는 엣지가 없다 (경로 종료)",
+        "end": "● END 도달",
+        "fail_route": "노드 %s 가 FAIL 종단으로 라우팅됐다 (%s)",
+        "exhaust_done": "루프 소진 처리 완료 — '%s' 수행 후 파이프라인을 실패로 종결한다 (산출물 확인)",
+        "fail_no_edge": "노드 %s FAILED — 실패를 처리하는 엣지가 없다",
+        "loop_out": "피드백 루프 소진: %s (max %d 초과)",
+        "max_steps": "max_total_steps(%s) 초과 — 폭주 방지로 중단",
+        "deadlock": "END 미도달 상태로 실행할 노드가 없다 (데드락). 대기 중: %s",
+        "none": "없음",
+        "not_run": "미실행",
+        "ok": "✔ 파이프라인 SUCCEEDED — 산출물: %s",
+        "paused": "⏸ 파이프라인 PAUSED — 게이트 '%s' 에서 확인 대기",
+        "paused_review": "  선행 산출물 검토: %s/outputs/",
+        "paused_resume": "  확인 후 재개: python3 %s %s --resume %s [--var key=확정값 ...]",
+        "failed": "✘ 파이프라인 FAILED — %s",
+        "resume_hint": "  재개: python3 %s %s --resume %s",
+        "timeout": "노드 타임아웃 (%ss 초과)",
+        "no_cli": "claude CLI를 찾을 수 없다: %s",
+        "internal": "러너 내부 오류: %r",
+        "mock_text": "[MOCK] %s iter %d 실행 결과",
+        "ctx_header": "---\n## 선행 노드 출력 (컨텍스트)\n\n",
+        "ctx_item": "### 선행 노드 `%s` — %s (iter %d)\n전체 출력 파일: %s\n\n%s",
+        "ctx_trunc": "\n...(잘림 — 전체는 파일 참조)",
+        "protocol": "---\n"
+                    "## 실행 프로토콜 (반드시 준수)\n"
+                    "너는 그래프 파이프라인 '%s'의 노드 `%s` 이다. (반복 %d회차, run_id=%s)\n"
+                    "작업을 끝내면 응답의 **마지막 줄**에 반드시 다음 형식으로 상태를 보고하라:\n\n"
+                    "GRAPH_STATUS: SUCCEEDED   (성공)  또는  GRAPH_STATUS: FAILED   (실패)\n\n"
+                    "후속 노드의 분기 판정에 필요한 값이 있으면 그 **직전 줄**에 한 줄 JSON 으로:\n\n"
+                    "GRAPH_OUTPUT: {\"key\": \"value\"}\n",
+        "validated": "검증 통과: 노드 %d개, 엣지 %d개 (%s)",
+    },
+}
+
 
 # ---------------------------------------------------------------------------
 # 미니 YAML 파서 (PyYAML 폴백)
@@ -289,6 +389,7 @@ class PipelineError(Exception):
 
 DEFAULT_SETTINGS = {
     "mode": "runner",  # runner | session — 기본 실행 모드 선언 (session 은 Claude 가 해석)
+    "lang": "en",  # en | ko — 실행 로그·프롬프트 주입 문구 언어
     "parallelism": 4,
     "state_dir": ".graph-runs",
     "node_timeout": 3600,
@@ -721,6 +822,8 @@ class Pipeline:
                 errors.append(
                     "엣지 %s: on_exhausted 는 FAIL 또는 노드 id" % e["key"]
                 )
+        if str(self.settings["lang"]) not in MESSAGES:
+            errors.append("settings.lang 는 %s (현재: %r)" % ("|".join(sorted(MESSAGES)), self.settings["lang"]))
         if str(self.settings["mode"]) not in ("runner", "session"):
             errors.append("settings.mode 는 runner | session (현재: %r)" % self.settings["mode"])
         if not self.nodes:
@@ -813,6 +916,7 @@ class Runner:
     def __init__(self, pipe, args):
         self.pipe = pipe
         self.args = args
+        self.msg = MESSAGES.get(str(pipe.settings.get("lang", "en")), MESSAGES["en"])
         self.mock = args.mock
         self.mock_plan = {}
         for spec in args.mock_status or []:
@@ -896,11 +1000,10 @@ class Runner:
 
     # ---- 메인 루프 ----
     def run(self):
-        self.log("▶ 파이프라인 '%s' 시작 — run_id=%s%s"
-                 % (self.pipe.name, self.run_id, " (mock)" if self.mock else ""))
+        self.log(self.msg["start"]
+                 % (self.pipe.name, self.run_id, self.msg["mock"] if self.mock else ""))
         if str(self.pipe.settings["mode"]) == "session":
-            self.log("ℹ settings.mode 는 session 이지만 러너로 실행한다"
-                     " (세션 모드는 Claude 가 Agent 툴로 해석 실행)")
+            self.log(self.msg["session_note"])
         self.pool = ThreadPoolExecutor(max_workers=int(self.pipe.settings["parallelism"]))
         try:
             self._on_complete(START, "SUCCEEDED", {}, "")
@@ -924,9 +1027,8 @@ class Runner:
                     for n in self.pipe.nodes
                     if self.ever_arrived[n] and self.required[n] - self.ever_arrived[n]
                 }
-                self.fail_reason = (
-                    "END 미도달 상태로 실행할 노드가 없다 (데드락). 대기 중: %s"
-                    % (json.dumps(waiting, ensure_ascii=False) if waiting else "없음")
+                self.fail_reason = self.msg["deadlock"] % (
+                    json.dumps(waiting, ensure_ascii=False) if waiting else self.msg["none"]
                 )
             result = "FAILED"
         self.save_state(result)
@@ -935,26 +1037,24 @@ class Runner:
             r = self.results.get(n)
             self.log(
                 "  %-28s %s"
-                % (n, "%s (iter %d)" % (r["status"], r["iteration"]) if r else "미실행")
+                % (n, "%s (iter %d)" % (r["status"], r["iteration"]) if r else self.msg["not_run"])
             )
         self.log("─" * 60)
         if result == "SUCCEEDED":
-            self.log("✔ 파이프라인 SUCCEEDED — 산출물: %s" % self.run_dir)
+            self.log(self.msg["ok"] % self.run_dir)
         elif result == "PAUSED":
-            self.log("⏸ 파이프라인 PAUSED — 게이트 '%s' 에서 확인 대기" % self.paused_at)
-            self.log("  선행 산출물 검토: %s/outputs/" % self.run_dir)
-            self.log("  확인 후 재개: python3 %s %s --resume %s [--var key=확정값 ...]"
-                     % (sys.argv[0], self.pipe.yml_path, self.run_id))
+            self.log(self.msg["paused"] % self.paused_at)
+            self.log(self.msg["paused_review"] % self.run_dir)
+            self.log(self.msg["paused_resume"] % (sys.argv[0], self.pipe.yml_path, self.run_id))
         else:
-            self.log("✘ 파이프라인 FAILED — %s" % self.fail_reason)
-            self.log("  재개: python3 %s %s --resume %s"
-                     % (sys.argv[0], self.pipe.yml_path, self.run_id))
+            self.log(self.msg["failed"] % self.fail_reason)
+            self.log(self.msg["resume_hint"] % (sys.argv[0], self.pipe.yml_path, self.run_id))
         return result
 
     # ---- 완료 처리 (메인 스레드 전용) ----
     def _on_complete(self, node, status, outputs, text):
         if node != START:
-            self.log("%s %s %s (iter %d)"
+            self.log(self.msg["node_end"]
                      % ("✔" if status == "SUCCEEDED" else "✘", node, status,
                         self.iteration[node]))
             self.save_state()
@@ -971,29 +1071,24 @@ class Runner:
                 if fired > e["loop"]["max"]:
                     on_ex = e["loop"]["on_exhausted"]
                     if on_ex == "FAIL":
-                        self.fail_reason = (
-                            "피드백 루프 소진: %s (max %d 초과)" % (e["key"], e["loop"]["max"])
-                        )
+                        self.fail_reason = self.msg["loop_out"] % (e["key"], e["loop"]["max"])
                         return
-                    self.log("⚠ 루프 소진 %s → '%s' 노드로 위임" % (e["key"], on_ex))
+                    self.log(self.msg["delegate"] % (e["key"], on_ex))
                     self.live.add(on_ex)
                     self.exhaust_nodes.add(on_ex)
                     self._activate(on_ex)
                     continue
-                self.log("↻ 피드백 %s → %s (%d/%d)"
+                self.log(self.msg["feedback"]
                          % (e["src"], e["dst"], fired, e["loop"]["max"]))
             self._deliver(e)
         if not matched and node != START:
             if node in self.exhaust_nodes:
                 # 소진 처리 노드는 보고 후 파이프라인을 실패로 종결하는 것이 계약
-                self.fail_reason = (
-                    "루프 소진 처리 완료 — '%s' 수행 후 파이프라인을 실패로 종결한다"
-                    " (산출물 확인)" % node
-                )
+                self.fail_reason = self.msg["exhaust_done"] % node
             elif status == "FAILED":
-                self.fail_reason = "노드 %s FAILED — 실패를 처리하는 엣지가 없다" % node
+                self.fail_reason = self.msg["fail_no_edge"] % node
             else:
-                self.log("⚠ %s SUCCEEDED 이후 매칭되는 엣지가 없다 (경로 종료)" % node)
+                self.log(self.msg["dead_end"] % node)
         self._schedule()
 
     def _deliver(self, e):
@@ -1003,13 +1098,10 @@ class Runner:
         dst = e["dst"]
         if dst == END:
             self.end_reached = True
-            self.log("● END 도달")
+            self.log(self.msg["end"])
             return
         if dst == FAIL:
-            self.fail_reason = "노드 %s 가 FAIL 종단으로 라우팅됐다 (%s)" % (
-                e["src"],
-                e["key"],
-            )
+            self.fail_reason = self.msg["fail_route"] % (e["src"], e["key"])
             return
         if e["src"] in self.live or e["loop"]:
             self.live.add(dst)
@@ -1058,10 +1150,7 @@ class Runner:
     def _activate(self, node):
         self.steps += 1
         if self.steps > int(self.pipe.settings["max_total_steps"]):
-            self.fail_reason = (
-                "max_total_steps(%s) 초과 — 폭주 방지로 중단"
-                % self.pipe.settings["max_total_steps"]
-            )
+            self.fail_reason = self.msg["max_steps"] % self.pipe.settings["max_total_steps"]
             return
         self.arrived[node].clear()
         self.iteration[node] += 1
@@ -1076,11 +1165,11 @@ class Runner:
             }
             prev = self.prev_nodes.get(node)
             if prev and prev.get("status") in ("PAUSED", "SUCCEEDED") and it == 1:
-                self.log("⏩ 게이트 %s 통과 (이전 실행에서 확인됨)" % node)
+                self.log(self.msg["gate_pass"] % node)
                 self.results[node] = dict(record, status="SUCCEEDED")
                 self._on_complete(node, "SUCCEEDED", {}, "")
                 return
-            self.log("⏸ 게이트 %s 도달 — 일시정지" % node)
+            self.log(self.msg["gate_pause"] % node)
             self.results[node] = dict(record, status="PAUSED")
             self.paused_at = node
             return
@@ -1093,7 +1182,7 @@ class Runner:
             and it == 1
             and prev.get("status") == "SUCCEEDED"
         ):
-            self.log("⏩ %s 캐시 재사용 (이전 실행 SUCCEEDED)" % node)
+            self.log(self.msg["cache"] % node)
             text = ""
             of = prev.get("output_file")
             if of and Path(of).is_file():
@@ -1108,7 +1197,7 @@ class Runner:
             self._on_complete(node, "SUCCEEDED", prev.get("outputs") or {}, text)
             return
         self.live.add(node)
-        self.log("▶ %s 시작 (iter %d)" % (node, it))
+        self.log(self.msg["node_start"] % (node, it))
         fut = self.pool.submit(self._run_node, node, it)
         self.futures[fut] = node
 
@@ -1128,7 +1217,7 @@ class Runner:
                     status, outputs, text = self._exec_claude(nd, prompt)
                 if status == "SUCCEEDED" or attempt == attempts:
                     break
-                self.log("↺ %s 실패, 재시도 %d/%d" % (node, attempt, nd["retry"]))
+                self.log(self.msg["retry"] % (node, attempt, nd["retry"]))
             ofile = self.run_dir / "outputs" / ("%s.iter%d.md" % (node, it))
             ofile.write_text(text)
             with self.lock:
@@ -1141,7 +1230,7 @@ class Runner:
                 }
             return status, outputs, text
         except Exception as ex:  # 워커에서는 절대 예외를 전파하지 않는다
-            text = "러너 내부 오류: %r" % ex
+            text = self.msg["internal"] % ex
             with self.lock:
                 self.results[node] = {
                     "status": "FAILED",
@@ -1156,7 +1245,7 @@ class Runner:
         seq = self.mock_plan.get(node)
         status = seq[min(it - 1, len(seq) - 1)] if seq else "SUCCEEDED"
         outputs = self.mock_outputs.get(node, {})
-        text = "[MOCK] %s iter %d 실행 결과\nGRAPH_STATUS: %s" % (node, it, status)
+        text = self.msg["mock_text"] % (node, it) + "\nGRAPH_STATUS: %s" % status
         time.sleep(0.05)
         return status, outputs, text
 
@@ -1180,9 +1269,9 @@ class Runner:
                 timeout=int(s["node_timeout"]),
             )
         except subprocess.TimeoutExpired:
-            return "FAILED", {}, "노드 타임아웃 (%ss 초과)" % s["node_timeout"]
+            return "FAILED", {}, self.msg["timeout"] % s["node_timeout"]
         except FileNotFoundError:
-            return "FAILED", {}, "claude CLI를 찾을 수 없다: %s" % bin_
+            return "FAILED", {}, self.msg["no_cli"] % bin_
         text = proc.stdout
         try:
             data = json.loads(proc.stdout)
@@ -1209,7 +1298,7 @@ class Runner:
                 pass
         if statuses:
             return statuses[-1].upper(), outputs
-        self.log("⚠ GRAPH_STATUS 마커가 없다 — exit 0 이므로 SUCCEEDED 로 간주")
+        self.log(self.msg["no_marker"])
         return "SUCCEEDED", outputs
 
     # ---- 프롬프트 조립 ----
@@ -1246,24 +1335,15 @@ class Runner:
                     continue
                 body = (r["text"] or "").strip()
                 if len(body) > limit:
-                    body = body[:limit] + "\n...(잘림 — 전체는 파일 참조)"
+                    body = body[:limit] + self.msg["ctx_trunc"]
                 ctx.append(
-                    "### 선행 노드 `%s` — %s (iter %d)\n전체 출력 파일: %s\n\n%s"
+                    self.msg["ctx_item"]
                     % (p, r["status"], r["iteration"], r["output_file"], body)
                 )
         if ctx:
-            parts.append("---\n## 선행 노드 출력 (컨텍스트)\n\n" + "\n\n".join(ctx))
+            parts.append(self.msg["ctx_header"] + "\n\n".join(ctx))
 
-        parts.append(
-            "---\n"
-            "## 실행 프로토콜 (반드시 준수)\n"
-            "너는 그래프 파이프라인 '%s'의 노드 `%s` 이다. (반복 %d회차, run_id=%s)\n"
-            "작업을 끝내면 응답의 **마지막 줄**에 반드시 다음 형식으로 상태를 보고하라:\n\n"
-            "GRAPH_STATUS: SUCCEEDED   (성공)  또는  GRAPH_STATUS: FAILED   (실패)\n\n"
-            "후속 노드의 분기 판정에 필요한 값이 있으면 그 **직전 줄**에 한 줄 JSON 으로:\n\n"
-            "GRAPH_OUTPUT: {\"key\": \"value\"}\n"
-            % (self.pipe.name, nd["id"], it, self.run_id)
-        )
+        parts.append(self.msg["protocol"] % (self.pipe.name, nd["id"], it, self.run_id))
         return "\n\n".join(parts)
 
 
@@ -1432,8 +1512,8 @@ def main(argv=None):
             print("  - %s" % e, file=sys.stderr)
         return 2
     if args.validate:
-        print("검증 통과: 노드 %d개, 엣지 %d개 (%s)"
-              % (len(pipe.nodes), len(pipe.edges), pipe.name))
+        lang_msgs = MESSAGES.get(str(pipe.settings.get("lang", "en")), MESSAGES["en"])
+        print(lang_msgs["validated"] % (len(pipe.nodes), len(pipe.edges), pipe.name))
         return 0
     if args.mermaid:
         print(mermaid(pipe))

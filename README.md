@@ -118,9 +118,9 @@ $ PL=.claude/skills/order-pipeline-dev
 $ python3 $PL/scripts/run_graph.py $PL/pipeline.yml \
     --var requirement="Add partial-refund support to the order API"
 
-[10:02:11] ▶ analyst 시작 (iter 1)
+[10:02:11] ▶ analyst started (iter 1)
 [10:03:24] ✔ analyst SUCCEEDED (iter 1)
-[10:03:24] ⏸ 게이트 spec-gate 도달 — 일시정지        # exit code 3
+[10:03:24] ⏸ gate spec-gate reached — paused        # exit code 3
 ```
 
 The analyst produced a spec draft and the questions worth asking. Claude reads
@@ -132,17 +132,17 @@ $ python3 $PL/scripts/run_graph.py $PL/pipeline.yml --resume 20260731-100211-ab1
     --var requirement="..." \
     --var decisions="scope: refunds after settlement excluded; API: extend existing endpoint"
 
-[10:07:02] ⏩ analyst 캐시 재사용
-[10:07:02] ⏩ 게이트 spec-gate 통과 (이전 실행에서 확인됨)
-[10:07:02] ▶ implement 시작 (iter 1)     # runs in parallel
-[10:07:02] ▶ test 시작 (iter 1)          # with implement
-[10:14:40] ▶ qa 시작 (iter 1)
-[10:18:03] ✘ qa FAILED (iter 1)          # acceptance A3 failed
-[10:18:03] ↻ 피드백 qa → implement (1/2)
+[10:07:02] ⏩ analyst reused from cache
+[10:07:02] ⏩ gate spec-gate passed (confirmed in a previous run)
+[10:07:02] ▶ implement started (iter 1)     # runs in parallel
+[10:07:02] ▶ test started (iter 1)          # with implement
+[10:14:40] ▶ qa started (iter 1)
+[10:18:03] ✘ qa FAILED (iter 1)             # acceptance A3 failed
+[10:18:03] ↻ feedback qa → implement (1/2)
 [10:21:47] ✔ qa SUCCEEDED (iter 2)
 [10:24:12] ✔ review SUCCEEDED (iter 1)
-[10:24:12] ● END 도달
-[10:24:12] ✔ 파이프라인 SUCCEEDED — 산출물: .graph-runs/20260731-100211-ab12
+[10:24:12] ● END reached
+[10:24:12] ✔ pipeline SUCCEEDED — artifacts: .graph-runs/20260731-100211-ab12
 ```
 
 Every node's full prompt and output is preserved under `.graph-runs/<run-id>/`
@@ -284,6 +284,7 @@ parallel attempts.
 | Low-level edges | `edges:` with `when` expressions such as `route == heavy`, `to: FAIL` termination |
 | State and resume | `.graph-runs/<run-id>/state.json`, `--resume` with cached successes |
 | Dry verification | `--validate`, `--dry-run`, `--mermaid`, `--mock` with scripted statuses and outputs |
+| Log language | `settings.lang: en \| ko` — localized runner logs and injected protocol; markers stay language-neutral |
 
 Agents report `GRAPH_STATUS: SUCCEEDED|FAILED` and optional
 `GRAPH_OUTPUT: {"key": "value"}` on their last lines; the runner injects the
