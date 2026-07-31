@@ -65,5 +65,5 @@
 - 병렬 팀 → `parallel` 블록 (Fan-Out + 다음 스텝 Fan-In)
 - 수렴 루프 / "N회 연속 실패 시 중단" → `max: N` + `exhausted: <보고 노드>` (실행 후 자동 실패 종결)
 - 대화형 게이트(AskUserQuestion 스펙 확정 등) → `gate: true` 노드
-  (일시정지 → 확정 → `--resume` + `--var` 주입, templates/pipeline-skill 참조)
+  (일시정지 → 확정 → `--resume` + `--var` 주입, templates/pipeline-dev 참조)
 - 커밋/머지는 그래프에 넣지 않는다 (END 이후 수동)

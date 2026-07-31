@@ -14,7 +14,7 @@ graph-builder 플러그인
 <project>/
   CLAUDE.md                            # 개발 요청 시 오케스트레이션 사용 명시
   .claude/
-    skills/pipeline-skill/             # 메인 오케스트레이션 스킬 (독자 실행)
+    skills/<도메인>-pipeline-dev/      # 메인 오케스트레이션 스킬 (독자 실행)
       SKILL.md · pipeline.yml · prompts/ · scripts/run_graph.py
     agents/<prefix>-analyst.md ···     # 에이전트 구성 (역할·모델·도구)
 ```
@@ -33,7 +33,7 @@ graph-builder 플러그인
 팀 설계 확인(mermaid) → 에이전트·파이프라인 스킬 생성 → CLAUDE.md 등록 →
 mock 검증 → 인계. 이후 "파이프라인에 보안 검사 추가해줘" → `edit` 스킬.
 
-## 기본 개발 오케스트레이션 (templates/pipeline-skill)
+## 기본 개발 오케스트레이션 (templates/pipeline-dev)
 
 ```yaml
 workflow:
@@ -102,7 +102,7 @@ skills/
   build/                            # graph-builder:build — 오케스트레이션 구성
     SKILL.md                        # Phase 1~6 구성 절차
     scripts/run_graph.py            # 실행 엔진 (산출물에 복사됨)
-    templates/pipeline-skill/       # 산출물 오케스트레이션 스킬 골격 (SKILL.md+yml+prompts)
+    templates/pipeline-dev/         # 산출물 오케스트레이션 스킬 골격 (SKILL.md+yml+prompts)
     templates/agents/               # 에이전트 정의 골격 (analyst/implementer/test/qa/reviewer)
     references/team-patterns.md     # 팀 아키텍처 패턴 ↔ 그래프 DSL
     references/agent-guide.md       # 에이전트 작성·치환 규칙

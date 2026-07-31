@@ -28,7 +28,7 @@ workflow:
 ## 3. Producer–Reviewer (생성 → 검수 + 수렴 루프)
 
 산출물을 만들고 독립 검수자가 판정, 실패 시 재작업. **개발 오케스트레이션의
-기본 골격** — templates/pipeline-skill 이 이 패턴(+Fan-Out)이다.
+기본 골격** — templates/pipeline-dev 가 이 패턴(+Fan-Out)이다.
 
 ```yaml
 workflow:

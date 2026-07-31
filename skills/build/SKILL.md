@@ -14,7 +14,7 @@ description: 개발 오케스트레이션 구성 메타 스킬. 사용자가 "�
 <project>/
   CLAUDE.md                              # ① 개발 요청 시 오케스트레이션 사용 명시
   .claude/
-    skills/<파이프라인명>/                # ② 메인 오케스트레이션 스킬 (기본명: pipeline-skill)
+    skills/<파이프라인명>/                # ② 메인 오케스트레이션 스킬 (기본명: <도메인>-pipeline-dev)
       SKILL.md                           #    실행 절차 (러너/세션 모드)
       pipeline.yml                       #    흐름 SSOT — 사용자가 yml 로 추가·변경
       prompts/*.md                       #    노드별 태스크 입력·판정 기준
@@ -65,8 +65,8 @@ description: 개발 오케스트레이션 구성 메타 스킬. 사용자가 "�
 파이프라인) 노드를 병합한다. 노드가 많을수록 세션 비용과 루프 폭이 커진다.
 
 사용자에게 확인받을 것: ① 노드/에이전트 표(역할·모델) ② 흐름 mermaid
-(pipeline.yml 초안으로 `--mermaid` 생성) ③ 파이프라인명(기본 `pipeline-skill`)과
-에이전트 접두어(기본: 프로젝트 슬러그) ④ **기본 실행 모드** —
+(pipeline.yml 초안으로 `--mermaid` 생성) ③ 파이프라인명(기본 `<도메인>-pipeline-dev` — 도메인 슬러그는
+에이전트 접두어와 동일하게) ④ **기본 실행 모드** —
 러너(권장: 무인·결정적·resume·오케스트레이션 비용 0) vs
 세션(서브에이전트 화면 실시간 관찰·개입 가능, resume 없음·메인 세션 오버헤드).
 선택은 산출물 pipeline.yml 의 `settings.mode` 에 기록되고, 실행 시마다
@@ -80,7 +80,7 @@ description: 개발 오케스트레이션 구성 메타 스킬. 사용자가 "�
 
 ## Phase 4: 오케스트레이션 스킬 생성 (`.claude/skills/<파이프라인명>/`)
 
-`templates/pipeline-skill/` 전체를 복사한 뒤:
+`templates/pipeline-dev/` 전체를 복사한 뒤:
 
 1. `SKILL.md`·`pipeline.yml`·`prompts/*.md` 의 플레이스홀더
    (`{{pipeline_name}}`, `{{prefix}}`, `{{project_name}}`)를 치환한다.
@@ -138,4 +138,4 @@ grep -rn "{{" $PL .claude/agents/<prefix>-*.md | grep -v "{{vars\.\|{{run\.\|{{n
 - `references/yml-spec.md` — pipeline.yml 전체 스키마·DSL·CLI
 - `references/prompt-guide.md` — 프롬프트 작성 규칙, 기존 하네스 변환 매핑
 - `references/session-mode.md` — 세션 오케스트레이션(트리 UI) 해석 규칙
-- `templates/pipeline-skill/` — 산출물 스킬 골격 / `templates/agents/` — 에이전트 골격
+- `templates/pipeline-dev/` — 산출물 스킬 골격 / `templates/agents/` — 에이전트 골격
