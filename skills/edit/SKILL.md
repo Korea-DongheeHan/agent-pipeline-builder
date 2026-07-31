@@ -41,7 +41,20 @@ python3 $PL/scripts/run_graph.py $PL/pipeline.yml --mock --mock-status <노드>=
 python3 $PL/scripts/run_graph.py $PL/pipeline.yml --mock --mock-output '<노드>={"key": "값"}'
 ```
 
-### 4. 보고
+### 4. 변경 이력 기록 (필수)
+
+파이프라인 디렉토리의 `CHANGELOG.md` 에 한 줄을 추가한다 (없으면 생성):
+
+```markdown
+| 날짜 | 요청 | 변경 파일 |
+|---|---|---|
+| 2026-07-31 | 보안 검사 노드 추가 | pipeline.yml, prompts/security.md |
+```
+
+같은 유형의 변경 요청이 반복되면(2회+) 근본 원인(프롬프트 판정 기준·에이전트
+역할·흐름 설계)을 짚어 구조적 수정을 제안한다.
+
+### 5. 보고
 
 변경 전/후 mermaid 비교, 수정 파일 목록, mock 검증 결과, 트리거 문구가
 바뀌어야 하면 CLAUDE.md 마커 블록 갱신 여부를 보고한다.
