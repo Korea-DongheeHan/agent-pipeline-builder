@@ -52,7 +52,7 @@ plugin nor any dependency beyond Python 3 and the `claude` CLI.
 ## Install
 
 ```
-/plugin marketplace add <this-repo-url>
+/plugin marketplace add Korea-DongheeHan/graph-builder
 /plugin install graph-builder@graph-builder-marketplace
 ```
 

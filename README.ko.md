@@ -53,7 +53,7 @@ graph-builder 플러그인
 ## 설치
 
 ```
-/plugin marketplace add <이 저장소 URL>
+/plugin marketplace add Korea-DongheeHan/graph-builder
 /plugin install graph-builder@graph-builder-marketplace
 ```
 
