@@ -106,7 +106,8 @@ python3 $PL/scripts/run_graph.py $PL/pipeline.yml --validate
 python3 $PL/scripts/run_graph.py $PL/pipeline.yml --mock          # 스펙 게이트 PAUSED(exit 3) 확인
 python3 $PL/scripts/run_graph.py $PL/pipeline.yml --mock \
   --resume <RUN_ID> --mock-status qa=FAILED,SUCCEEDED             # 게이트 통과 + 수렴 루프 확인
-grep -rn "{{" $PL .claude/agents/<prefix>-*.md   # 플레이스홀더 잔존 = 미완성
+# 스캐폴딩 플레이스홀더 잔존 = 미완성 ({{vars.*}} 등 런타임 변수는 정상이므로 제외)
+grep -rn "{{" $PL .claude/agents/<prefix>-*.md | grep -v "{{vars\.\|{{run\.\|{{node\."
 ```
 
 **트리거 검증** — 산출물 SKILL.md 의 description 을 놓고 사고 점검한다:
