@@ -102,4 +102,3 @@ grep -rn "{{" $PL .claude/agents/<prefix>-*.md   # 플레이스홀더 잔존 = �
 - `references/prompt-guide.md` — 프롬프트 작성 규칙, 기존 하네스 변환 매핑
 - `references/session-mode.md` — 세션 오케스트레이션(트리 UI) 해석 규칙
 - `templates/pipeline-skill/` — 산출물 스킬 골격 / `templates/agents/` — 에이전트 골격
-- `examples/` — leave-batch(배치 체인), dev-harness-graph(하네스 변환)

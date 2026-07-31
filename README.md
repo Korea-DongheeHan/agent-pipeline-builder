@@ -109,8 +109,6 @@ skills/
     references/yml-spec.md          # pipeline.yml 전체 스펙
     references/prompt-guide.md      # 프롬프트 규칙 + 기존 하네스 변환 매핑
     references/session-mode.md      # 트리 UI(세션) 모드 해석 규칙
-    examples/leave-batch/           # 배치 체인 예제
-    examples/dev-harness-graph/     # 하네스 스킬 변환 예제
   edit/                             # graph-builder:edit — 구성 변경·진단
     SKILL.md
 ```

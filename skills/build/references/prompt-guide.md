@@ -58,13 +58,12 @@
 
 ## 기존 하네스 스킬 → 그래프 변환 시
 
-오케스트레이터형 하네스 스킬을 변환할 때의 대응 (상세 예:
-`examples/dev-harness-graph/`):
+오케스트레이터형 하네스 스킬을 변환할 때의 대응:
 
 - Phase/서브 에이전트 → 노드. 전용 에이전트 정의가 있으면 노드 `agent:` 필드로
   재사용하고, 프롬프트에는 **태스크 입력만** 쓴다 (역할은 에이전트 정의에 있음)
 - 병렬 팀 → `parallel` 블록 (Fan-Out + 다음 스텝 Fan-In)
 - 수렴 루프 / "N회 연속 실패 시 중단" → `loop: {max: N, exhausted: [escalate, FAIL], ...}` 블록
-- **대화형 게이트(AskUserQuestion)는 옮길 수 없다** — 실행 전에 확정해 vars 로
-  주입하거나, 가정 문서화로 대체하고 실행 후 검토
-- 커밋/머지 등 사람 게이트는 그래프에 넣지 않는다 (END 이후 수동)
+- 대화형 게이트(AskUserQuestion 스펙 확정 등) → `gate: true` 노드
+  (일시정지 → 확정 → `--resume` + `--var` 주입, templates/pipeline-skill 참조)
+- 커밋/머지는 그래프에 넣지 않는다 (END 이후 수동)
