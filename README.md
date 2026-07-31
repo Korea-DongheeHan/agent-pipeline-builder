@@ -225,6 +225,53 @@ workflow:
   - execute
 ```
 
+**Fan-out and synthesize** — split work into isolated contexts, then merge at
+a barrier:
+
+```yaml
+workflow:
+  - plan-slices                                     # writes one brief per slice
+  - parallel: [audit-api, audit-batch, audit-web]   # each slice in its own session
+  - synthesize                                      # waits for all, merges the outputs
+```
+
+**Adversarial verification** — pair every producer with an independent refuter,
+then keep only what survives:
+
+```yaml
+workflow:
+  - parallel:
+      - [draft-a, refute-a]    # refuters report GRAPH_OUTPUT {"refuted": "yes|no"}
+      - [draft-b, refute-b]
+  - synthesize                 # add context: [draft-a, draft-b] on this node
+```
+
+**Generate and filter** — several generators with different lenses, one filter:
+
+```yaml
+workflow:
+  - parallel: [ideate-risk, ideate-ux, ideate-cost]
+  - filter                     # dedupe, score against criteria, return the best
+```
+
+**Loop until done** — repeat a bounded self-loop while the node reports work
+remaining:
+
+```yaml
+workflow:
+  - sweep:                     # GRAPH_OUTPUT {"remaining": "yes"|"no"} per batch
+      if: remaining == yes
+      goto: sweep              # self-loop: run another batch
+      max: 20                  # hard cap by design — cost stays bounded
+  - report
+```
+
+These graphs are static: the node set is fixed when you author the YAML.
+Dynamic fan-out (agent count decided at runtime), unbounded loops, and
+pairwise tournament brackets are out of scope by design. Approximate them with
+a fixed-width fan-out, a capped self-loop, and a single judge node over
+parallel attempts.
+
 ## What the YAML can express
 
 | Capability | Syntax |

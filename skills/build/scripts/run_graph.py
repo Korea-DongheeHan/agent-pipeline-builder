@@ -66,9 +66,11 @@ def _scalar(tok):
     if tok[0] in ('"', "'") and len(tok) >= 2 and tok[-1] == tok[0]:
         return tok[1:-1]
     low = tok.lower()
-    if low in ("true", "yes"):
+    # yes/no 는 불리언으로 강제하지 않는다 (YAML 1.2 방식) — OUTPUT 비교값·케이스
+    # 키가 문자열로 유지돼야 에이전트가 보고한 "yes" 와 어긋나지 않는다
+    if low == "true":
         return True
-    if low in ("false", "no"):
+    if low == "false":
         return False
     if low in ("null", "~"):
         return None
@@ -309,6 +311,14 @@ _EXPR_RE = re.compile(r"^([\w.-]+)\s*(==|!=)\s*(.+)$")
 _EXPR_IN_RE = re.compile(r"^([\w.-]+)\s+in\s+(.+)$")
 
 
+def _expr_operand(raw):
+    """표현식 비교값은 타입 강제 없이 문자열 원문으로 다룬다 (따옴표만 제거)."""
+    s = raw.strip()
+    if len(s) >= 2 and s[0] in "\"'" and s[-1] == s[0]:
+        return s[1:-1]
+    return s
+
+
 def _normalize_when(when):
     """when 정규화. 생략 시 STATUS==SUCCEEDED.
 
@@ -328,15 +338,16 @@ def _normalize_when(when):
                 conds.append({"type": "STATUS", "status": u})
             elif _EXPR_RE.match(s):
                 key, op, raw = _EXPR_RE.match(s).groups()
-                val = _value(raw.strip())
                 field = "equals" if op == "==" else "not_equals"
-                conds.append({"type": "OUTPUT", "key": key, field: val})
+                conds.append({"type": "OUTPUT", "key": key, field: _expr_operand(raw)})
             elif _EXPR_IN_RE.match(s):
                 key, raw = _EXPR_IN_RE.match(s).groups()
-                val = _value(raw.strip())
-                conds.append(
-                    {"type": "OUTPUT", "key": key, "in": val if isinstance(val, list) else [val]}
-                )
+                r = raw.strip()
+                if r.startswith("[") and r.endswith("]"):
+                    vals = [_expr_operand(x) for x in r[1:-1].split(",") if x.strip()]
+                else:
+                    vals = [_expr_operand(r)]
+                conds.append({"type": "OUTPUT", "key": key, "in": vals})
             else:
                 raise PipelineError("알 수 없는 when 표현식: %r" % c)
         elif isinstance(c, dict):
