@@ -286,6 +286,7 @@ class PipelineError(Exception):
 
 
 DEFAULT_SETTINGS = {
+    "mode": "runner",  # runner | session — 기본 실행 모드 선언 (session 은 Claude 가 해석)
     "parallelism": 4,
     "state_dir": ".graph-runs",
     "node_timeout": 3600,
@@ -709,6 +710,8 @@ class Pipeline:
                 errors.append(
                     "엣지 %s: on_exhausted 는 FAIL 또는 노드 id" % e["key"]
                 )
+        if str(self.settings["mode"]) not in ("runner", "session"):
+            errors.append("settings.mode 는 runner | session (현재: %r)" % self.settings["mode"])
         if not self.nodes:
             errors.append("노드가 없다")
         for nid, nd in self.nodes.items():
@@ -884,6 +887,9 @@ class Runner:
     def run(self):
         self.log("▶ 파이프라인 '%s' 시작 — run_id=%s%s"
                  % (self.pipe.name, self.run_id, " (mock)" if self.mock else ""))
+        if str(self.pipe.settings["mode"]) == "session":
+            self.log("ℹ settings.mode 는 session 이지만 러너로 실행한다"
+                     " (세션 모드는 Claude 가 Agent 툴로 해석 실행)")
         self.pool = ThreadPoolExecutor(max_workers=int(self.pipe.settings["parallelism"]))
         try:
             self._on_complete(START, "SUCCEEDED", {}, "")

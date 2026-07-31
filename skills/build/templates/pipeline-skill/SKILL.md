@@ -13,14 +13,16 @@ graph-builder 로 생성된 **독자 실행 오케스트레이션**이다. 이 �
 - 태스크 입력·판정 기준: `prompts/*.md`
 - 실행 엔진: `scripts/run_graph.py` (상태 관리·분기·병렬·재개)
 
-## 실행 모드 선택
+## 실행 모드
 
 | 모드 | 방식 | 특징 |
 |---|---|---|
-| **러너 (기본)** | `python3 scripts/run_graph.py pipeline.yml` | 결정적 실행·상태 저장·resume. 각 노드는 독립 claude 세션(컨텍스트 격리). 진행은 콘솔 로그 |
-| **세션** | `references/session-mode.md` 규칙에 따라 Claude 가 Agent 툴로 노드 실행 | 트리 UI 에 노드별 서브에이전트 표시(실시간 관찰). resume 없음 |
+| **러너** | `python3 scripts/run_graph.py pipeline.yml` | 결정적 실행·상태 저장·resume. 각 노드는 독립 claude 세션(컨텍스트 격리). 진행은 콘솔 로그. 오케스트레이션 비용 0 |
+| **세션** | `references/session-mode.md` 규칙에 따라 Claude 가 Agent 툴로 노드 실행 | 서브에이전트 화면에서 노드별 실시간 관찰·이동 가능, 진행 중 개입 가능. resume 없음, 메인 세션 오버헤드 발생 |
 
-무인·배치 실행이나 규모가 큰 작업은 러너, 사용자가 진행을 지켜보고 싶어하면 세션.
+**기본 모드는 `pipeline.yml` 의 `settings.mode`** 를 따른다. 사용자가
+"세션 모드로 / 진행 보면서" 또는 "러너 모드로" 라고 요청하면 그때만 오버라이드한다.
+무인·배치·대규모·반복 실행은 러너, 관찰·디버깅·개입이 필요한 실행은 세션.
 
 ## 절차 (Claude 가 이 스킬을 실행할 때)
 
@@ -39,7 +41,7 @@ graph-builder 로 생성된 **독자 실행 오케스트레이션**이다. 이 �
 2. **비용 고지** — 노드 1회 실행 = claude 세션 1개. 노드 수·루프 상한 기준
    예상 세션 수를 사용자에게 알린다. 단일 파일 수준의 얇은 변경이면
    파이프라인 대신 직접 수행을 제안한다.
-3. **러너 모드 실행:**
+3. **실행 (러너 모드 — `settings.mode: runner` 이거나 사용자가 러너를 지정한 경우):**
    ```bash
    python3 GRAPH_PIPELINE/scripts/run_graph.py GRAPH_PIPELINE/pipeline.yml --validate
    python3 GRAPH_PIPELINE/scripts/run_graph.py GRAPH_PIPELINE/pipeline.yml --var requirement="..."
@@ -66,9 +68,10 @@ graph-builder 로 생성된 **독자 실행 오케스트레이션**이다. 이 �
 5. **완료 시** — `.graph-runs/<run-id>/` 산출물(노드별 출력·acceptance 판정)을
    요약 보고한다. **실패 시** — state.json 의 실패 노드·사유를 보고하고, 원인
    수정 후 `--resume <RUN_ID>` 를 안내한다.
-6. **세션 모드 요청 시** — `references/session-mode.md` 의 해석 규칙을 따라
-   Agent 툴(subagent_type = 노드의 agent)로 그래프를 직접 오케스트레이션한다.
-   게이트 노드는 그 자리에서 AskUserQuestion 으로 수행한다.
+6. **세션 모드 (`settings.mode: session` 이거나 사용자가 "진행 보면서/세션
+   모드로" 요청한 경우)** — 3~5 대신 `references/session-mode.md` 의 해석
+   규칙을 따라 Agent 툴(subagent_type = 노드의 agent)로 그래프를 직접
+   오케스트레이션한다. 게이트 노드는 그 자리에서 AskUserQuestion 으로 수행한다.
 7. **마무리** — 커밋·머지는 사람 게이트다. 결과 검토 후 사용자 확인을 받아
    진행한다. 완료 보고 끝에 **개선 피드백을 선택적으로 묻는다** (강요 금지):
    "결과물이나 파이프라인 동작에서 아쉬운 점이 있었나요?" — 받은 피드백은

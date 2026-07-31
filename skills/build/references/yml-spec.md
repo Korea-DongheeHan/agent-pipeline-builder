@@ -82,6 +82,7 @@ workflow:
 
 | 키 | 기본값 | 설명 |
 |---|---|---|
+| `mode` | `runner` | 기본 실행 모드 선언. `runner` = run_graph.py 실행(결정적·resume), `session` = Claude 가 Agent 툴로 해석 실행(관찰·개입). 산출물 SKILL.md 가 이 값을 기본으로 따르고, 사용자가 실행 시 오버라이드 가능 |
 | `parallelism` | 4 | 동시에 실행할 최대 노드 수 |
 | `state_dir` | `.graph-runs` | 실행 상태·산출물 저장 위치 |
 | `node_timeout` | 3600 | 노드(에이전트) 1회 실행 제한(초) |
