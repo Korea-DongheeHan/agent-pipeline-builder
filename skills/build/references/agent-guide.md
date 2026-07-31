@@ -39,6 +39,26 @@ Phase 1 프로젝트 분석에서 얻은 사실로 치환한다. 하나라도 �
 | `{{conventions}}` | 레이어 규칙·의존 방향·네이밍 등 핵심 컨벤션 요약 |
 | `{{test_conventions}}` | 테스트 프레임워크·배치 규칙 |
 
+## 컨벤션 참조 규칙 (우선순위: 자동 로드 > lazy-read 포인터 > 전문 import 금지)
+
+노드 세션은 프로젝트 루트에서 뜨므로 **프로젝트 CLAUDE.md(@참조 포함)·
+`.claude/rules/`·도메인 스킬은 이미 자동 로드된다** — 이 범위의 컨벤션은
+에이전트 정의에 다시 넣지 마라 (이중 로드 = 노드 수 × 토큰 낭비 + drift).
+에이전트에는 SSOT 포인터 한 줄이면 충분하다.
+
+컨벤션이 **자동 로드 범위 밖**의 대형 문서(예: `docs/conventions/*.md`)에
+있는 경우에만, 전문을 복사하지 말고 **역할별 lazy-read 포인터**를 넣는다:
+
+```markdown
+## 참조 문서 (작업 시작 시 해당 항목만 Read)
+- 리뷰 기준·의존 방향: docs/conventions/architecture.md
+- 트랜잭션·캐시 규칙: docs/conventions/transaction.md
+```
+
+역할과 관련된 문서만 매핑한다 (reviewer=아키텍처·리뷰 기준,
+test-engineer=테스트 규약 등). 원본이 SSOT 로 유지되고, 갱신이 다음
+실행부터 자동 반영된다.
+
 ## 모델 배정 권고
 
 - analyst / reviewer: 판단 품질이 결과를 좌우 — 상위 모델 유지(생략 = 상속)

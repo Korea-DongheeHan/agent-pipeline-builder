@@ -846,9 +846,15 @@ class Runner:
         self.lock = threading.Lock()
         self.pool = None
 
-    # ---- 로그 ----
+    # ---- 로그 (콘솔 + <run_dir>/run.log 자동 기록 — 리다이렉트 불필요) ----
     def log(self, msg):
-        print("[%s] %s" % (time.strftime("%H:%M:%S"), msg), flush=True)
+        line = "[%s] %s" % (time.strftime("%H:%M:%S"), msg)
+        print(line, flush=True)
+        try:
+            with (self.run_dir / "run.log").open("a") as f:
+                f.write(line + "\n")
+        except OSError:
+            pass  # 로그 파일 실패가 실행을 막아선 안 된다
 
     # ---- 상태 저장 ----
     def save_state(self, result="RUNNING"):

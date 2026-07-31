@@ -203,6 +203,7 @@ python3 scripts/run_graph.py pipeline.yml            # 실행
 ```
 <state_dir>/<run-id>/
   state.json                  # 노드 상태·outputs·루프 카운터 (resume 입력)
+  run.log                     # 실행 로그 자동 기록 (콘솔과 동일 — 리다이렉트 불필요)
   prompts/<node>.iterN.prompt.md   # 실제 주입된 프롬프트 (디버깅)
   outputs/<node>.iterN.md          # 노드 출력 전문
 ```

@@ -44,7 +44,10 @@ graph-builder 로 생성된 **독자 실행 오케스트레이션**이다. 이 �
    python3 GRAPH_PIPELINE/scripts/run_graph.py GRAPH_PIPELINE/pipeline.yml --validate
    python3 GRAPH_PIPELINE/scripts/run_graph.py GRAPH_PIPELINE/pipeline.yml --var requirement="..."
    ```
-   장시간 실행은 백그라운드로 돌리고 로그를 관찰한다.
+   장시간 실행은 백그라운드로 돌리고 로그를 관찰한다. 실행 로그는
+   `.graph-runs/<run-id>/run.log` 에 자동 기록되므로 리다이렉트가 필요 없다.
+   (주의: `> .graph-runs/...` 리다이렉트는 첫 실행 시 디렉토리가 아직 없어
+   실패한다 — 리다이렉트가 꼭 필요하면 이미 존재하는 경로를 쓰라.)
 4. **SDD 스펙 게이트 (exit 3 / `⏸ PAUSED` 시 — 반드시 수행):**
    analyst 완료 후 파이프라인이 `spec-gate` 에서 일시정지한다.
    1. `.graph-runs/<run-id>/outputs/analyst.iter1.md` 를 읽는다 —
