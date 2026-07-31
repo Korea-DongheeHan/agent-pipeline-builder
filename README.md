@@ -2,6 +2,8 @@
 
 **Build a multi-agent development orchestration for your project from a single sentence.**
 
+![graph-builder: pipeline.yml compiled into a deterministic multi-agent graph](docs/hero.svg)
+
 graph-builder is a Claude Code plugin that scaffolds a self-contained, YAML-driven
 agent pipeline into your repository. Describe your domain once, and the plugin
 generates an orchestration skill, a specialized agent team, and the trigger wiring.
