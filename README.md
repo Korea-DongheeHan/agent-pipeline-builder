@@ -54,10 +54,99 @@ plugin nor any dependency beyond Python 3 and the `claude` CLI.
 /plugin install graph-builder@graph-builder-marketplace
 ```
 
-Then, in any project: *"Set up a development orchestration"*. The `build` skill
-audits existing setup, analyzes your stack and conventions, proposes the team
-design with a mermaid diagram, scaffolds everything, registers the CLAUDE.md
-trigger, and verifies the graph with a mock run before handing it over.
+## Building an orchestration
+
+In any project, say *"Set up a development orchestration"*. The `build` skill
+walks six phases and asks for your confirmation where it matters:
+
+1. **Audit.** Detects existing pipelines, agents, and CLAUDE.md markers.
+   Maintenance requests get routed to `graph-builder:edit` instead of
+   duplicating anything.
+2. **Analyze.** Reads your stack, real build/test commands, and convention
+   documents. Nothing is guessed.
+3. **Design (you confirm).** Proposes the node/agent table and a mermaid
+   diagram of the flow, plus the pipeline name (default
+   `<domain>-pipeline-dev`), the agent prefix, and the default execution mode.
+4. **Generate agents.** Writes `.claude/agents/<prefix>-*.md` with your real
+   commands and pointers to your convention sources. Existing agents are
+   reused, never duplicated.
+5. **Generate the pipeline skill and register the trigger.** Scaffolds the
+   skill directory and appends a marker block to your CLAUDE.md.
+6. **Verify.** Validates the graph, mock-runs the gate and the convergence
+   loop, and checks that no placeholder survived.
+
+## What gets generated
+
+For a project called `order-service` with prefix `order`:
+
+```
+order-service/
+  CLAUDE.md                            # + trigger block (marker-delimited, replaceable)
+  .claude/
+    skills/order-pipeline-dev/
+      SKILL.md                         # how to run: modes, spec gate, resume, evolution
+      pipeline.yml                     # the flow — edit this to change the orchestration
+      prompts/                         # per-node task input and pass/fail criteria
+        analyst.md · implement.md · test.md · qa.md · review.md · escalate.md
+      scripts/run_graph.py             # the engine (stdlib-only Python)
+      references/session-mode.md       # rules for the observable session mode
+    agents/
+      order-analyst.md                 # role, working style, project facts
+      order-implementer.md
+      order-test-engineer.md
+      order-qa.md
+      order-reviewer.md
+```
+
+A generated agent carries the facts that make it useful on day one:
+
+```markdown
+---
+name: order-implementer
+description: order-service implementation specialist for the implement node.
+---
+## Project context
+- Stack: Kotlin + Spring Boot multi-module Gradle
+- Build: ./gradlew classes testClasses --parallel
+- Conventions: AGENTS.md is the single source; domain rules live in .claude/skills/<domain>/
+```
+
+## Example: one feature request, end to end
+
+```bash
+$ PL=.claude/skills/order-pipeline-dev
+$ python3 $PL/scripts/run_graph.py $PL/pipeline.yml \
+    --var requirement="Add partial-refund support to the order API"
+
+[10:02:11] ▶ analyst 시작 (iter 1)
+[10:03:24] ✔ analyst SUCCEEDED (iter 1)
+[10:03:24] ⏸ 게이트 spec-gate 도달 — 일시정지        # exit code 3
+```
+
+The analyst produced a spec draft and the questions worth asking. Claude reads
+it and confirms the spec with you through a single AskUserQuestion round, then
+resumes with the decisions injected:
+
+```bash
+$ python3 $PL/scripts/run_graph.py $PL/pipeline.yml --resume 20260731-100211-ab12 \
+    --var requirement="..." \
+    --var decisions="scope: refunds after settlement excluded; API: extend existing endpoint"
+
+[10:07:02] ⏩ analyst 캐시 재사용
+[10:07:02] ⏩ 게이트 spec-gate 통과 (이전 실행에서 확인됨)
+[10:07:02] ▶ implement 시작 (iter 1)     # runs in parallel
+[10:07:02] ▶ test 시작 (iter 1)          # with implement
+[10:14:40] ▶ qa 시작 (iter 1)
+[10:18:03] ✘ qa FAILED (iter 1)          # acceptance A3 failed
+[10:18:03] ↻ 피드백 qa → implement (1/2)
+[10:21:47] ✔ qa SUCCEEDED (iter 2)
+[10:24:12] ✔ review SUCCEEDED (iter 1)
+[10:24:12] ● END 도달
+[10:24:12] ✔ 파이프라인 SUCCEEDED — 산출물: .graph-runs/20260731-100211-ab12
+```
+
+Every node's full prompt and output is preserved under `.graph-runs/<run-id>/`
+for audit. Commits stay in your hands.
 
 ## The default pipeline
 
@@ -80,6 +169,61 @@ workflow:
 
 Each node runs with a project-specific agent definition from `.claude/agents/`,
 carrying your real build commands, test commands, and convention pointers.
+
+## Graph engineering cookbook
+
+The default pipeline is one instance of a general graph language. Compose your
+own from these patterns (they nest freely):
+
+**Sequential chain** — batch jobs, migrations:
+
+```yaml
+workflow:
+  - extract
+  - transform
+  - load
+```
+
+**Conditional routing (Expert Pool)** — the triage node reports a routing key
+via `GRAPH_OUTPUT`, and each case gets its own sub-flow:
+
+```yaml
+workflow:
+  - triage                    # GRAPH_OUTPUT: {"kind": "bug" | "feature" | "docs"}
+  - branch:
+      on: kind
+      cases:
+        bug: [reproduce, fix]
+        feature: [design, implement]
+        docs: update-docs
+  - verify                    # merge point, joins on first arrival
+```
+
+**Quality gate chain** — fail fast with an explicit failure terminal:
+
+```yaml
+workflow:
+  - build-check:
+      if: FAILED
+      goto: [report-failure, FAIL]
+  - security-scan:
+      if: FAILED
+      goto: [report-failure, FAIL]
+  - deploy-ready
+```
+
+**Human checkpoint** — pause anywhere a person must decide before the graph
+continues:
+
+```yaml
+nodes:
+  - id: approve-plan
+    gate: true
+workflow:
+  - plan
+  - approve-plan              # pauses; resume injects the confirmed values
+  - execute
+```
 
 ## What the YAML can express
 
