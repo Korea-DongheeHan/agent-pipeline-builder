@@ -40,7 +40,7 @@
 | 구현(implement) | 설계 인터페이스 준수(병렬 노드가 같은 기준으로 작업 중) + 설계-코드 불일치 시 임의 우회 금지·명시 + **재실행(피드백) 시 FAIL 항목만 수정** (전체 재구현 금지 — 회귀 방지) |
 | 테스트/QA | 컴파일 게이트 먼저 + **acceptance 항목별 PASS/FAIL 판정표** + FAIL 에는 재현·원인 위치 명시(구현 노드가 이 보고만 보고 수정) + 구현 코드 직접 수정 금지 + 실행 안 한 검증을 통과로 보고 금지 |
 | 리뷰(review) | APPROVE=SUCCEEDED / REQUEST_CHANGES=FAILED 매핑 명시 + 지적에 파일:라인·요구 수정 + minor 는 판정에 미반영 + QA 와 중복 검증 금지 |
-| 에스컬레이션(escalate) | 루프 소진 시 양쪽 근거 병기 보고서 → 후속 엣지가 FAIL 종단으로 라우팅 |
+| 에스컬레이션(escalate) | 루프 소진 시 양쪽 근거 병기 보고서 — `exhausted:` 대상 노드는 실행 후 러너가 자동으로 실패 종결 |
 
 피드백 루프 규약: 판정 노드(테스트/QA/리뷰)는 FAILED 보고 시
 `GRAPH_OUTPUT: {"failed_items": "A3,A5"}` 로 실패 항목을 남기고,
@@ -63,7 +63,7 @@
 - Phase/서브 에이전트 → 노드. 전용 에이전트 정의가 있으면 노드 `agent:` 필드로
   재사용하고, 프롬프트에는 **태스크 입력만** 쓴다 (역할은 에이전트 정의에 있음)
 - 병렬 팀 → `parallel` 블록 (Fan-Out + 다음 스텝 Fan-In)
-- 수렴 루프 / "N회 연속 실패 시 중단" → `loop: {max: N, exhausted: [escalate, FAIL], ...}` 블록
+- 수렴 루프 / "N회 연속 실패 시 중단" → `max: N` + `exhausted: <보고 노드>` (실행 후 자동 실패 종결)
 - 대화형 게이트(AskUserQuestion 스펙 확정 등) → `gate: true` 노드
   (일시정지 → 확정 → `--resume` + `--var` 주입, templates/pipeline-skill 참조)
 - 커밋/머지는 그래프에 넣지 않는다 (END 이후 수동)

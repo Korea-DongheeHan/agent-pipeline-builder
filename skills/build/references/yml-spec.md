@@ -29,7 +29,7 @@ workflow:
       if: FAILED                       # 노드 부착 라우팅: 이 노드의 상태·출력 체크 후 점프
       goto: implement                  # 이미 나온 노드로 = 피드백 루프 (자동 판정)
       max: 2                           # 루프 상한 (뒤로 goto 기본 3)
-      exhausted: [escalate, FAIL]      # 소진 시 경로: FAIL(기본) | 노드 | 시퀀스
+      exhausted: escalate              # 소진 시: FAIL(기본, 즉시 실패) | 노드 id
   - review
   - branch:                            # 다중 케이스 분기 (단일 선행 노드 뒤에만)
       on: route                        # GRAPH_OUTPUT 키. 생략 시 케이스 키가
@@ -64,7 +64,7 @@ workflow:
   ```yaml
   - loop:
       max: 2
-      exhausted: [escalate, FAIL]
+      exhausted: escalate
       redo: implement                  # 생략 시 body 첫 노드
       body:
         - parallel: [implement, test]

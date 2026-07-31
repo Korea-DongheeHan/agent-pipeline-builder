@@ -376,6 +376,16 @@ def _seq_node_ids(steps):
     return ids
 
 
+def _exhausted_value(spec):
+    exh = spec.get("exhausted", "FAIL")
+    if isinstance(exh, (list, dict)):
+        raise PipelineError(
+            "exhausted 는 FAIL 또는 노드 id 하나다 — 노드는 실행 후 "
+            "(후속 엣지가 없으면) 자동으로 실패 종결된다: %r" % exh
+        )
+    return str(exh)
+
+
 def compile_workflow(wf, mark_join_any):
     """중첩 workflow 블록을 edges 목록으로 컴파일한다.
 
@@ -385,7 +395,8 @@ def compile_workflow(wf, mark_join_any):
                                            다음 스텝이 Fan-In(join: all)
       - loop: {body: [...], max: N,        피드백 루프. body 안 redo 이후 노드가
               redo: 노드|리스트,            FAILED 면 redo 로 재작업. redo 생략 시
-              exhausted: FAIL|노드|시퀀스}   body 첫 노드. 소진 시 exhausted 경로
+              exhausted: FAIL|노드id}       body 첫 노드. 소진 시: FAIL=즉시 실패,
+                                           노드id=그 노드 실행(보고 등) 후 자동 실패 종결
       - branch: {on: 출력키, cases: {...}}  조건 분기. on 생략 시 케이스 키는
                                            SUCCEEDED|FAILED|ALWAYS (STATUS 분기).
                                            케이스 값 = 노드 | 시퀀스. 분기 다음
@@ -441,13 +452,10 @@ def compile_workflow(wf, mark_join_any):
                 raise PipelineError("loop 블록에는 body 가 필요하다")
             en, ex = compile_seq(body, None, merge_point)
             redo = [str(r) for r in _as_list(spec.get("redo"))] or list(en)
-            exh = spec.get("exhausted", "FAIL")
-            if isinstance(exh, list):
-                x_en, _ = compile_seq(exh, None, False)
-                on_exh = x_en[0]
-            else:
-                on_exh = str(exh)
-            loop_cfg = {"max": int(spec.get("max", 3)), "on_exhausted": on_exh}
+            loop_cfg = {
+                "max": int(spec.get("max", 3)),
+                "on_exhausted": _exhausted_value(spec),
+            }
             body_ids = _seq_node_ids(body)
             missing = [r for r in redo if r not in body_ids]
             if missing:
@@ -479,11 +487,10 @@ def compile_workflow(wf, mark_join_any):
             backward = any(t in placed for t in targets)
             loop_cfg = None
             if backward or "max" in spec:
-                exh = spec.get("exhausted", "FAIL")
-                if isinstance(exh, list):
-                    x_en, _ = compile_seq(exh, None, False)
-                    exh = x_en[0]
-                loop_cfg = {"max": int(spec.get("max", 3)), "on_exhausted": str(exh)}
+                loop_cfg = {
+                    "max": int(spec.get("max", 3)),
+                    "on_exhausted": _exhausted_value(spec),
+                }
             else:
                 for t in targets:  # 앞으로 점프 = 분기 합류 가능성 → join: any
                     if t not in (END, FAIL):
@@ -833,6 +840,7 @@ class Runner:
         self.futures = {}
         self.end_reached = False
         self.paused_at = None  # 게이트 일시정지
+        self.exhaust_nodes = set()  # on_exhausted 로 위임된 노드 — 완료 후 자동 실패 종결
         self.fail_reason = None
         self.steps = 0
         self.lock = threading.Lock()
@@ -946,13 +954,20 @@ class Runner:
                         return
                     self.log("⚠ 루프 소진 %s → '%s' 노드로 위임" % (e["key"], on_ex))
                     self.live.add(on_ex)
+                    self.exhaust_nodes.add(on_ex)
                     self._activate(on_ex)
                     continue
                 self.log("↻ 피드백 %s → %s (%d/%d)"
                          % (e["src"], e["dst"], fired, e["loop"]["max"]))
             self._deliver(e)
         if not matched and node != START:
-            if status == "FAILED":
+            if node in self.exhaust_nodes:
+                # 소진 처리 노드는 보고 후 파이프라인을 실패로 종결하는 것이 계약
+                self.fail_reason = (
+                    "루프 소진 처리 완료 — '%s' 수행 후 파이프라인을 실패로 종결한다"
+                    " (산출물 확인)" % node
+                )
+            elif status == "FAILED":
                 self.fail_reason = "노드 %s FAILED — 실패를 처리하는 엣지가 없다" % node
             else:
                 self.log("⚠ %s SUCCEEDED 이후 매칭되는 엣지가 없다 (경로 종료)" % node)
@@ -1255,8 +1270,15 @@ def mermaid(pipe):
     safe = {START: "S", END: "E", FAIL: "F"}
     for i, n in enumerate(pipe.nodes):
         safe[n] = "n%d" % i
+    # 소진 위임 대상 노드 (실행 후 후속 엣지 없으면 자동 실패 종결)
+    exhaust_targets = {
+        e["loop"]["on_exhausted"]
+        for e in pipe.edges
+        if e["loop"] and e["loop"]["on_exhausted"] != "FAIL"
+    }
+    auto_fail = {t for t in exhaust_targets if not pipe.out_edges.get(t)}
     lines = ["flowchart TD", "  S([START])", "  E([END])"]
-    if any(e["dst"] == FAIL for e in pipe.edges):
+    if auto_fail or any(e["dst"] == FAIL for e in pipe.edges):
         lines.append("  F([FAIL])")
     for n in pipe.nodes:
         if pipe.nodes[n]["gate"]:
@@ -1270,6 +1292,15 @@ def mermaid(pipe):
         else:
             arrow = ("-->|%s|" % label) if label else "-->"
         lines.append("  %s %s %s" % (safe[e["src"]], arrow, safe[e["dst"]]))
+    seen = set()
+    for e in pipe.edges:  # 소진 위임 경로 시각화
+        if e["loop"] and e["loop"]["on_exhausted"] != "FAIL":
+            line = "  %s -. exhausted .-> %s" % (safe[e["src"]], safe[e["loop"]["on_exhausted"]])
+            if line not in seen:
+                seen.add(line)
+                lines.append(line)
+    for t in sorted(auto_fail):
+        lines.append("  %s -.-> F" % safe[t])
     return "\n".join(lines)
 
 

@@ -44,12 +44,12 @@ workflow:
       if: FAILED                     # acceptance FAIL → 구현 재작업 수렴 루프
       goto: implement
       max: 2
-      exhausted: [escalate, FAIL]    # 반복 실패 → 보고 후 사람에게 위임
+      exhausted: escalate            # 반복 실패 → 보고 노드 실행 후 자동 실패 종결
   - review:                          # 정적 리뷰 (APPROVE → END, 커밋은 사람 게이트)
       if: FAILED
       goto: implement
       max: 2
-      exhausted: [escalate, FAIL]
+      exhausted: escalate
 ```
 
 각 노드는 `.claude/agents/<prefix>-*.md` 정의(역할·모델·도구)로 실행된다.

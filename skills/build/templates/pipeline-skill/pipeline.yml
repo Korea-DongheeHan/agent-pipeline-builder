@@ -55,9 +55,9 @@ workflow:
       if: FAILED                       # acceptance FAIL → 구현 재작업
       goto: implement
       max: 2
-      exhausted: [escalate, FAIL]      # 반복 실패 → 보고 후 의도적 실패 종결
+      exhausted: escalate              # 소진 → 보고 노드 실행 후 자동 실패 종결
   - review:
       if: FAILED                       # REQUEST_CHANGES → 재작업
       goto: implement
       max: 2
-      exhausted: [escalate, FAIL]
+      exhausted: escalate

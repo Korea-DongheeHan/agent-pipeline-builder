@@ -37,7 +37,7 @@ workflow:
       if: FAILED
       goto: implement
       max: 2
-      exhausted: [escalate, FAIL]   # 반복 실패는 사람에게 위임
+      exhausted: escalate            # 반복 실패 → 보고 노드 실행 후 자동 실패 종결
 ```
 
 ## 4. Expert Pool (조건 라우팅)
