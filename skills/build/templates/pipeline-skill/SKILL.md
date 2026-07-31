@@ -24,7 +24,7 @@ graph-builder 로 생성된 **독자 실행 오케스트레이션**이다. 이 �
 
 ## 절차 (Claude 가 이 스킬을 실행할 때)
 
-이 스킬 디렉토리를 **HARNESS**(`.claude/skills/{{pipeline_name}}`)라 한다.
+이 스킬 디렉토리를 **GRAPH_PIPELINE**(`.claude/skills/{{pipeline_name}}`)라 한다.
 프로젝트 루트에서 실행한다 (에이전트 정의·빌드 명령이 루트 기준).
 
 0. **실행 컨텍스트 판별** — `.graph-runs/` 의 최근 run(state.json)을 확인해
@@ -41,8 +41,8 @@ graph-builder 로 생성된 **독자 실행 오케스트레이션**이다. 이 �
    파이프라인 대신 직접 수행을 제안한다.
 3. **러너 모드 실행:**
    ```bash
-   python3 HARNESS/scripts/run_graph.py HARNESS/pipeline.yml --validate
-   python3 HARNESS/scripts/run_graph.py HARNESS/pipeline.yml --var requirement="..."
+   python3 GRAPH_PIPELINE/scripts/run_graph.py GRAPH_PIPELINE/pipeline.yml --validate
+   python3 GRAPH_PIPELINE/scripts/run_graph.py GRAPH_PIPELINE/pipeline.yml --var requirement="..."
    ```
    장시간 실행은 백그라운드로 돌리고 로그를 관찰한다.
 4. **SDD 스펙 게이트 (exit 3 / `⏸ PAUSED` 시 — 반드시 수행):**
@@ -54,7 +54,7 @@ graph-builder 로 생성된 **독자 실행 오케스트레이션**이다. 이 �
       질문이 "없음"이면 스펙 초안 요약만 보여주고 진행 동의를 받는다.
    3. 확정 결과를 한 단락으로 정리해 재개한다:
       ```bash
-      python3 HARNESS/scripts/run_graph.py HARNESS/pipeline.yml \
+      python3 GRAPH_PIPELINE/scripts/run_graph.py GRAPH_PIPELINE/pipeline.yml \
         --resume <RUN_ID> --var requirement="..." \
         --var decisions="① 범위: ... ② 아키텍처: ... ③ 완료 기준: ..."
       ```
