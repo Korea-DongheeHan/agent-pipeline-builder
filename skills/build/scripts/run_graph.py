@@ -60,6 +60,7 @@ MESSAGES = {
         "dead_end": "⚠ no matching edge after %s SUCCEEDED (path ends)",
         "end": "● END reached",
         "fail_route": "node %s routed to the FAIL terminal (%s)",
+        "fail_after": "node '%s' finished — failing the pipeline as declared (goto: [..., FAIL])",
         "exhaust_done": "loop exhaustion handled — '%s' finished its report;"
                         " failing the pipeline (see its output)",
         "fail_no_edge": "node %s FAILED — no edge handles the failure",
@@ -107,6 +108,7 @@ MESSAGES = {
         "dead_end": "⚠ %s SUCCEEDED 이후 매칭되는 엣지가 없다 (경로 종료)",
         "end": "● END 도달",
         "fail_route": "노드 %s 가 FAIL 종단으로 라우팅됐다 (%s)",
+        "fail_after": "'%s' 완료 — 선언된 FAIL 라우팅(goto: [..., FAIL])에 따라 파이프라인을 실패로 종결한다",
         "exhaust_done": "루프 소진 처리 완료 — '%s' 수행 후 파이프라인을 실패로 종결한다 (산출물 확인)",
         "fail_no_edge": "노드 %s FAILED — 실패를 처리하는 엣지가 없다",
         "loop_out": "피드백 루프 소진: %s (max %d 초과)",
@@ -499,7 +501,7 @@ def _exhausted_value(spec):
     return str(exh)
 
 
-def compile_workflow(wf, mark_join_any):
+def compile_workflow(wf, mark_join_any, mark_fail_after):
     """중첩 workflow 블록을 edges 목록으로 컴파일한다.
 
     스텝 종류:
@@ -597,6 +599,12 @@ def compile_workflow(wf, mark_join_any):
             """src 노드에 라우팅 규칙 1개 적용. 순차 흐름 유지 여부를 반환."""
             cond = spec.get("if", "ALWAYS")
             targets = [str(t) for t in _as_list(spec["goto"])]
+            if FAIL in targets and len(targets) > 1:
+                # 노드와 FAIL 이 함께 오면 "노드 수행 후 실패 종결" 의도다 —
+                # FAIL 엣지를 동시에 걸면 노드 활성화가 선점당하므로 분리한다
+                targets = [t for t in targets if t != FAIL]
+                for t in targets:
+                    mark_fail_after(t)
             backward = any(t in placed for t in targets)
             loop_cfg = None
             if backward or "max" in spec:
@@ -736,9 +744,11 @@ class Pipeline:
 
         # workflow(중첩 DSL) → edges 컴파일. 분기 합류점은 join: any 로 (명시 설정 우선)
         auto_any = set()
+        fail_after = set()
         raw_edges = []
         if doc.get("workflow"):
-            raw_edges += compile_workflow(doc["workflow"], auto_any.add)
+            raw_edges += compile_workflow(doc["workflow"], auto_any.add, fail_after.add)
+        self.fail_after = fail_after
         raw_edges += doc.get("edges") or []
         for nid in auto_any:
             if nid in self.nodes and nid not in explicit_join:
@@ -1085,6 +1095,8 @@ class Runner:
             if node in self.exhaust_nodes:
                 # 소진 처리 노드는 보고 후 파이프라인을 실패로 종결하는 것이 계약
                 self.fail_reason = self.msg["exhaust_done"] % node
+            elif node in self.pipe.fail_after:
+                self.fail_reason = self.msg["fail_after"] % node
             elif status == "FAILED":
                 self.fail_reason = self.msg["fail_no_edge"] % node
             else:
@@ -1380,6 +1392,7 @@ def mermaid(pipe):
         if e["loop"] and e["loop"]["on_exhausted"] != "FAIL"
     }
     auto_fail = {t for t in exhaust_targets if not pipe.out_edges.get(t)}
+    auto_fail |= {t for t in getattr(pipe, "fail_after", set()) if not pipe.out_edges.get(t)}
     lines = ["flowchart TD", "  S([START])", "  E([END])"]
     if auto_fail or any(e["dst"] == FAIL for e in pipe.edges):
         lines.append("  F([FAIL])")
@@ -1522,7 +1535,11 @@ def main(argv=None):
         print(dry_run(pipe))
         return 0
 
-    runner = Runner(pipe, args)
+    try:
+        runner = Runner(pipe, args)
+    except PipelineError as ex:
+        print(str(ex), file=sys.stderr)
+        return 2
     result = runner.run()
     # 종료 코드: 0 성공, 1 실패, 2 로드/검증 오류, 3 게이트 일시정지
     return {"SUCCEEDED": 0, "PAUSED": 3}.get(result, 1)
