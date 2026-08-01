@@ -1,6 +1,6 @@
 {
   "name": "graph-builder",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "개발 오케스트레이션 구성 메타 플러그인. build 스킬이 프로젝트에 독자 실행 오케스트레이션(CLAUDE.md 트리거 + .claude/skills 파이프라인 스킬(yml+러너) + .claude/agents 에이전트)을 생성하고, edit 스킬이 yml·에이전트 구성 변경을 돕는다.",
   "author": {
     "name": "landsnail"
