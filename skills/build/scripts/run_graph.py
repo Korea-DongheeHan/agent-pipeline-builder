@@ -731,6 +731,9 @@ class Pipeline:
                 explicit_join.add(nid)
             self.nodes[nid] = {
                 "id": nid,
+                "type": str(nd.get("type", "agent")).lower(),  # agent | command
+                "run": nd.get("run"),          # type: command 의 셸 명령
+                "timeout": nd.get("timeout"),  # 노드별 타임아웃(초) — 생략 시 settings
                 "gate": bool(nd.get("gate")),  # 게이트: 도달 시 일시정지, resume 으로 통과
                 "prompt": nd.get("prompt"),
                 "model": nd.get("model") or self.settings["model"],
@@ -843,6 +846,16 @@ class Pipeline:
                 errors.append("노드 %s: join 은 all|any" % nid)
             if nd["gate"]:
                 continue  # 게이트 노드는 prompt 불필요
+            if nd["type"] not in ("agent", "command"):
+                errors.append("노드 %s: type 은 agent | command" % nid)
+                continue
+            if nd["type"] == "command":
+                # 신뢰 경계: run 은 러너가 그대로 실행한다 — yml 은 코드와 동일한 리뷰 대상
+                if not nd["run"]:
+                    errors.append("노드 %s: type: command 에는 run 이 필요하다" % nid)
+                if nd["prompt"]:
+                    errors.append("노드 %s: type: command 는 prompt 대신 run 을 쓴다" % nid)
+                continue
             if not nd["prompt"]:
                 errors.append("노드 %s: prompt 가 필요하다" % nid)
             elif self.resolve_prompt(nd["prompt"]) is None:
@@ -1217,14 +1230,19 @@ class Runner:
     def _run_node(self, node, it):
         try:
             nd = self.pipe.nodes[node]
-            prompt = self._build_prompt(nd, it)
-            pfile = self.run_dir / "prompts" / ("%s.iter%d.prompt.md" % (node, it))
-            pfile.write_text(prompt)
+            is_cmd = nd["type"] == "command"
+            prompt = None
+            if not is_cmd:
+                prompt = self._build_prompt(nd, it)
+                pfile = self.run_dir / "prompts" / ("%s.iter%d.prompt.md" % (node, it))
+                pfile.write_text(prompt)
             attempts = nd["retry"] + 1
             status, outputs, text = "FAILED", {}, ""
             for attempt in range(1, attempts + 1):
                 if self.mock:
                     status, outputs, text = self._exec_mock(node, it)
+                elif is_cmd:
+                    status, outputs, text = self._exec_command(nd, it)
                 else:
                     status, outputs, text = self._exec_claude(nd, prompt)
                 if status == "SUCCEEDED" or attempt == attempts:
@@ -1253,6 +1271,39 @@ class Runner:
                 }
             return "FAILED", {}, text
 
+    def _substitute(self, text, it, node_id):
+        subs = {"run.id": self.run_id, "node.id": node_id, "node.iteration": str(it)}
+        for k, v in (self.pipe.vars or {}).items():
+            subs["vars.%s" % k] = str(v)
+        for k, v in (self.args.var or {}).items():
+            subs["vars.%s" % k] = str(v)
+        for k, v in subs.items():
+            text = text.replace("{{%s}}" % k, v)
+        return text
+
+    def _exec_command(self, nd, it):
+        """type: command — 셸 명령 실행. exit 0 = SUCCEEDED, GRAPH_OUTPUT 은 stdout 에서 파싱."""
+        cmd = self._substitute(str(nd["run"]), it, nd["id"])
+        timeout = int(nd["timeout"] or self.pipe.settings["node_timeout"])
+        try:
+            proc = subprocess.run(
+                cmd, shell=True, capture_output=True, text=True, timeout=timeout
+            )
+        except subprocess.TimeoutExpired:
+            return "FAILED", {}, self.msg["timeout"] % timeout
+        text = proc.stdout or ""
+        if proc.stderr:
+            text += "\n[stderr]\n" + proc.stderr.strip()[-2000:]
+        outputs = {}
+        for m in OUTPUT_RE.findall(text):
+            try:
+                parsed = json.loads(m)
+                if isinstance(parsed, dict):
+                    outputs = parsed
+            except json.JSONDecodeError:
+                pass
+        return ("SUCCEEDED" if proc.returncode == 0 else "FAILED"), outputs, text
+
     def _exec_mock(self, node, it):
         seq = self.mock_plan.get(node)
         status = seq[min(it - 1, len(seq) - 1)] if seq else "SUCCEEDED"
@@ -1278,7 +1329,7 @@ class Runner:
                 input=prompt,
                 capture_output=True,
                 text=True,
-                timeout=int(s["node_timeout"]),
+                timeout=int(nd["timeout"] or s["node_timeout"]),
             )
         except subprocess.TimeoutExpired:
             return "FAILED", {}, self.msg["timeout"] % s["node_timeout"]
@@ -1318,14 +1369,7 @@ class Runner:
         path = self.pipe.resolve_prompt(nd["prompt"])
         if path is None:
             raise PipelineError("프롬프트 파일 없음: %s" % nd["prompt"])
-        content = path.read_text()
-        subs = {"run.id": self.run_id, "node.id": nd["id"], "node.iteration": str(it)}
-        for k, v in (self.pipe.vars or {}).items():
-            subs["vars.%s" % k] = str(v)
-        for k, v in (self.args.var or {}).items():
-            subs["vars.%s" % k] = str(v)
-        for k, v in subs.items():
-            content = content.replace("{{%s}}" % k, v)
+        content = self._substitute(path.read_text(), it, nd["id"])
 
         parts = [content]
         if nd["append_prompt"]:
@@ -1399,6 +1443,8 @@ def mermaid(pipe):
     for n in pipe.nodes:
         if pipe.nodes[n]["gate"]:
             lines.append('  %s[["%s ⏸"]]' % (safe[n], n))
+        elif pipe.nodes[n]["type"] == "command":
+            lines.append('  %s{{"%s"}}' % (safe[n], n))
         else:
             lines.append('  %s["%s"]' % (safe[n], n))
     for e in pipe.edges:

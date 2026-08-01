@@ -102,8 +102,16 @@ nodes:
                                # 오케스트레이터가 사람 확인(예: AskUserQuestion 스펙 확정)
                                # 후 --resume 으로 통과시킨다 (--var 로 확정 값 주입 가능).
                                # prompt 불필요, 에이전트 실행 없음
+  - id: build-check
+    type: command              # agent(기본) | command. command 는 에이전트 세션 없이
+    run: ./gradlew build       # 셸 명령을 실행한다 — exit 0 = SUCCEEDED, 그 외 FAILED.
+                               # stdout 의 GRAPH_OUTPUT 줄은 분기 값으로 파싱되고
+                               # run 문자열에 {{vars.*}} 치환이 적용된다.
+                               # 신뢰 경계: run 은 러너가 그대로 실행한다 —
+                               # pipeline.yml 은 코드와 동일한 리뷰 대상이다
+    timeout: 900               # 선택. 노드별 타임아웃(초) — 생략 시 settings.node_timeout
   - id: review                 # 필수, 고유. START/END/FAIL 은 예약어
-    prompt: prompts/review.md  # 필수(게이트 제외). 스크립트 실행 위치(cwd) 기준 상대경로.
+    prompt: prompts/review.md  # 필수(게이트·command 제외). 스크립트 실행 위치(cwd) 기준 상대경로.
                                # 없으면 pipeline.yml 위치 기준으로 폴백
     model: opus                # 선택. 노드별 모델
     agent: my-reviewer         # 선택. claude --agent — 실행 저장소의

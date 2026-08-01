@@ -203,10 +203,15 @@ workflow:
 **품질 게이트 체인.** 실패를 즉시 명시적으로 종결합니다.
 
 ```yaml
+nodes:
+  - {id: build-check, type: command, run: "./gradlew classes testClasses --parallel"}
+  - {id: security-scan, type: command, run: "./gradlew dependencyCheckAnalyze"}
+  - {id: deploy-ready, prompt: prompts/deploy-ready.md}
+  - {id: report-failure, prompt: prompts/report-failure.md}
 workflow:
   - build-check:
       if: FAILED
-      goto: [report-failure, FAIL]
+      goto: [report-failure, FAIL]   # 보고 노드 실행 후 실패 종결
   - security-scan:
       if: FAILED
       goto: [report-failure, FAIL]
@@ -278,6 +283,7 @@ workflow:
 | 다중 케이스 라우팅 | `branch: {on: <출력 키>, cases: ...}` |
 | 범위형 루프 블록 | `loop: {body, redo, max, exhausted}` |
 | 사람 확인 지점 | `gate: true` 노드. 일시정지(종료 코드 3) 후 확정 값과 함께 resume |
+| 결정적 셸 단계 | `type: command` 노드. 에이전트 세션 없이 실행하며 exit code 로 판정하고 stdout 의 `GRAPH_OUTPUT` 이 분기에 쓰임 |
 | 저수준 엣지 | `edges:` 와 `route == heavy` 같은 when 표현식, `to: FAIL` 종결 |
 | 상태와 재개 | `.graph-runs/<run-id>/state.json`, 성공 노드를 캐시하는 `--resume` |
 | 사전 검증 | `--validate`, `--dry-run`, `--mermaid`, 상태·출력 대본을 주는 `--mock` |

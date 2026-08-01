@@ -204,10 +204,15 @@ workflow:
 **Quality gate chain** — fail fast with an explicit failure terminal:
 
 ```yaml
+nodes:
+  - {id: build-check, type: command, run: "./gradlew classes testClasses --parallel"}
+  - {id: security-scan, type: command, run: "./gradlew dependencyCheckAnalyze"}
+  - {id: deploy-ready, prompt: prompts/deploy-ready.md}
+  - {id: report-failure, prompt: prompts/report-failure.md}
 workflow:
   - build-check:
       if: FAILED
-      goto: [report-failure, FAIL]
+      goto: [report-failure, FAIL]   # run the report node, then fail the run
   - security-scan:
       if: FAILED
       goto: [report-failure, FAIL]
@@ -283,6 +288,7 @@ parallel attempts.
 | Multi-case routing | `branch: {on: <output-key>, cases: ...}` |
 | Scoped loop block | `loop: {body, redo, max, exhausted}` |
 | Human checkpoint | `gate: true` node — pauses (exit 3), resume with confirmed values |
+| Deterministic shell steps | `type: command` node — no agent session; exit code is the verdict, stdout `GRAPH_OUTPUT` feeds routing |
 | Low-level edges | `edges:` with `when` expressions such as `route == heavy`, `to: FAIL` termination |
 | State and resume | `.graph-runs/<run-id>/state.json`, `--resume` with cached successes |
 | Dry verification | `--validate`, `--dry-run`, `--mermaid`, `--mock` with scripted statuses and outputs |
