@@ -56,6 +56,24 @@ plugin nor any dependency beyond Python 3 and the `claude` CLI.
 /plugin install graph-builder@graph-builder-marketplace
 ```
 
+## What to say
+
+Trigger phrases, by what you want:
+
+- **Build a new orchestration** (`graph-builder:build`) — "Set up a development
+  orchestration", "Build an agent pipeline for this repo", "Create a harness",
+  "Convert our orchestrator skill into a graph".
+- **Change or diagnose an installed pipeline** (`graph-builder:edit`) — "Add a
+  security-scan step to the pipeline", "Raise the convergence loop cap to 3",
+  "Turn qa into a command node", "Why did yesterday's pipeline run fail?".
+- **Run the scaffolded pipeline** (triggered by your project's CLAUDE.md, not by
+  this plugin) — any ordinary feature request such as "Add partial-refund
+  support", plus follow-ups like "resume the last run" or "rerun with the
+  review feedback", and "run it in session mode so I can watch".
+
+Plain code questions, one-line typo fixes, and build diagnostics intentionally
+do not trigger anything.
+
 ## Building an orchestration
 
 In any project, say *"Set up a development orchestration"*. The `build` skill
