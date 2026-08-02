@@ -85,5 +85,6 @@ test. <tests and evals>
 chore. <maintenance that fits nothing above>
 ```
 
-Example: `feat. add type: command nodes to the runner`. Subject in English or
-Korean; keep it under ~70 characters. Bodies stay free-form.
+Write the subject and body in Korean (only the type prefix is English).
+Example: `feat. 러너에 type: command 노드 추가`. Keep the subject under
+~70 characters; bodies stay free-form.
