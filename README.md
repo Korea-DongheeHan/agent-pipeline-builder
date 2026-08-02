@@ -320,6 +320,19 @@ by simply asking ("run it in session mode").
   or YAML), and `graph-builder:edit` applies changes with validation and a
   changelog entry.
 
+## Evals
+
+The skill layer ships its own eval suite under `evals/` — scaffolding
+completeness, in-place editing (no duplicate pipelines), and trigger
+discipline (a plain code question must not scaffold anything):
+
+```
+claude plugin eval graph-builder@graph-builder-marketplace --scaffold --runs 1
+```
+
+`plugin eval` is in early access; the deterministic graph engine is covered
+separately by `--validate` and `--mock` regression (22 checks per release).
+
 ## Plugin layout
 
 ```
@@ -333,4 +346,5 @@ skills/
     references/                     # yml spec, team patterns, agent guide,
                                     # prompt guide, session-mode rules
   edit/                             # graph-builder:edit — change & diagnose
+evals/                              # skill-layer eval cases (build / edit / trigger)
 ```

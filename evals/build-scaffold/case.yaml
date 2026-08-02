@@ -1,0 +1,38 @@
+description: build skill scaffolds a complete orchestration into a fresh project
+tags: [build]
+runs: 1
+context:
+  scaffold_script: |
+    mkdir -p src tests
+    printf '# demo-todo\n\nPython todo service.\nTest: python3 -m unittest discover tests\n' > README.md
+    printf 'def add(a, b):\n    return a + b\n' > src/calc.py
+execution:
+  prompt: |
+    Set up a development orchestration for this project. Use pipeline name
+    "demo-pipeline-dev", agent prefix "demo", runner mode, English outputs.
+    Do not ask questions; proceed with sensible defaults and report when done.
+  max_turns: 80
+  timeout_seconds: 1800
+  allowed_tools: ["Write", "Edit", "Bash"]
+graders:
+  - type: file_exists
+    name: pipeline-yml
+    path: .claude/skills/demo-pipeline-dev/pipeline.yml
+  - type: file_exists
+    name: runner-copied
+    path: .claude/skills/demo-pipeline-dev/scripts/run_graph.py
+  - type: file_exists
+    name: analyst-agent
+    path: .claude/agents/demo-analyst.md
+  - type: file_exists
+    name: claude-md
+    path: CLAUDE.md
+  - type: llm
+    name: scaffold-quality
+    criteria: |
+      The agent completed the graph-builder build procedure: it generated the
+      pipeline skill (SKILL.md, pipeline.yml, prompts) and five demo-* agent
+      definitions with real project facts substituted (no {{placeholder}} left),
+      registered a graph-builder marker block in CLAUDE.md, ran the graph
+      validation and a mock check, and the final report states the expected
+      session cost and the two execution modes.

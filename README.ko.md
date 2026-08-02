@@ -315,6 +315,19 @@ workflow:
 - **진화 루프.** 피드백은 구체적인 수정 대상(프롬프트, 에이전트, YAML)으로
   매핑되며, `graph-builder:edit` 가 검증과 변경 이력 기록을 포함해 반영합니다.
 
+## 평가 스위트
+
+스킬 계층은 `evals/` 아래에 자체 평가 스위트를 갖습니다. 스캐폴딩 완전성,
+설치된 파이프라인의 제자리 수정(중복 생성 금지), 그리고 일반 코드 질문에는
+아무것도 만들지 않는 트리거 절제를 검사합니다.
+
+```
+claude plugin eval graph-builder@graph-builder-marketplace --scaffold --runs 1
+```
+
+`plugin eval` 은 아직 얼리 액세스입니다. 결정적 그래프 엔진은 별도로
+`--validate` 와 `--mock` 회귀(릴리스마다 22건)로 검증합니다.
+
 ## 플러그인 구조
 
 ```
@@ -328,4 +341,5 @@ skills/
     references/                     # yml 스펙, 팀 패턴, 에이전트 가이드,
                                     # 프롬프트 가이드, 세션 모드 규칙
   edit/                             # graph-builder:edit — 변경과 진단
+evals/                              # 스킬 계층 평가 케이스 (build / edit / 트리거)
 ```

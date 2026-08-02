@@ -1,0 +1,43 @@
+description: change requests on an installed pipeline are edited in place, not re-scaffolded
+tags: [edit]
+runs: 1
+context:
+  scaffold_script: |
+    mkdir -p .claude/skills/demo-pipeline-dev/prompts .claude/skills/demo-pipeline-dev/scripts
+    curl -fsSL https://raw.githubusercontent.com/Korea-DongheeHan/graph-builder/main/skills/build/scripts/run_graph.py \
+      -o .claude/skills/demo-pipeline-dev/scripts/run_graph.py
+    cat > .claude/skills/demo-pipeline-dev/pipeline.yml <<'YML'
+    name: demo-pipeline-dev
+    settings: {lang: en}
+    nodes:
+      - {id: implement, prompt: prompts/implement.md}
+      - {id: review, prompt: prompts/review.md}
+    workflow:
+      - implement
+      - review:
+          if: FAILED
+          goto: implement
+          max: 2
+    YML
+    printf '# implement task\n' > .claude/skills/demo-pipeline-dev/prompts/implement.md
+    printf '# review task\n' > .claude/skills/demo-pipeline-dev/prompts/review.md
+    printf '<!-- graph-builder:demo-pipeline-dev start -->\nUse .claude/skills/demo-pipeline-dev for dev requests.\n<!-- graph-builder:demo-pipeline-dev end -->\n' > CLAUDE.md
+execution:
+  prompt: |
+    Add a security-scan step to our pipeline: it must run after implement and
+    before review, and block the flow when it fails. Verify your change.
+  max_turns: 60
+  timeout_seconds: 1200
+  allowed_tools: ["Write", "Edit", "Bash"]
+graders:
+  - type: file_exists
+    name: changelog-recorded
+    path: .claude/skills/demo-pipeline-dev/CHANGELOG.md
+  - type: llm
+    name: edited-in-place
+    criteria: |
+      The agent modified the existing pipeline (added a security-scan node to
+      pipeline.yml between implement and review, with a matching prompt file or
+      command node) instead of scaffolding a new pipeline directory, and it ran
+      the runner's --validate (and ideally --mock) to verify the change before
+      reporting.

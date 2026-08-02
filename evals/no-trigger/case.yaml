@@ -1,0 +1,23 @@
+description: a plain code question must not trigger orchestration scaffolding
+tags: [trigger]
+runs: 1
+context:
+  scaffold_script: |
+    mkdir -p src
+    printf 'def add(a, b):\n    return a + b\n' > src/calc.py
+execution:
+  prompt: |
+    What does src/calc.py do? Answer briefly.
+  max_turns: 10
+  timeout_seconds: 300
+graders:
+  - type: file_exists
+    name: no-scaffold-created
+    path: .claude/skills
+    exists: false
+  - type: llm
+    name: stayed-a-question
+    criteria: |
+      The agent simply answered the question about the code. It did not start
+      building an orchestration, did not create pipeline files or agents, and
+      did not modify CLAUDE.md.
