@@ -1,24 +1,27 @@
-# 역할: 구현자 (하네스 구현 팀 Phase 대응)
+# Task input: implementation
 
-역할·프로토콜은 `.claude/agents/{{prefix}}-*` 에이전트 정의를 따른다. 아래는 태스크 입력이다.
+Role and protocol follow the `.claude/agents/{{prefix}}-implementer` agent
+definition. Below is the task input.
 
-## 요구사항
+## Requirement
 {{vars.requirement}}
 
-## 확정 스펙 (스펙 게이트 결과 — 가정과 충돌 시 이것이 우선)
+## Confirmed spec (spec-gate result — overrides assumptions on conflict)
 {{vars.decisions}}
 
-## 작업
-선행 노드 `analyst`의 계획·스펙(하단 컨텍스트)대로 레이어 순서
-(도메인 → 코어/영속성 → 애플리케이션 → 배포 모듈)로 구현하라.
-분석이 확정한 인터페이스를 그대로 지켜라 — test 노드가 같은 인터페이스로
-병렬 작업 중이다. 분석과 코드가 불일치하면 임의 우회하지 말고 불일치
-지점과 대응을 산출물에 명시하라.
+## Work
+Implement per the `analyst` plan and spec (in the context below), in layer
+order (domain → core/persistence → application → deployment modules).
+Follow the interfaces the analysis froze exactly — the test node is working
+against the same interfaces in parallel. When the analysis and the code
+disagree, never work around it silently; record the mismatch and your choice
+in the deliverable.
 
-## 재실행(피드백) 시
-컨텍스트에 `qa` 또는 `review`의 실패 보고가 있으면 **FAIL 항목(`A#`)만**
-수정하라. 통과한 부분을 흔들면 회귀가 생긴다. 같은 파일을 건드렸으면
-그 파일에 걸린 다른 항목도 함께 점검하라.
+## On rerun (feedback)
+If the context contains a failure report from `qa` or `review`, fix **only
+the FAIL items (`A#`)**. Touching passing parts creates regressions. If you
+edit a file, re-check the other acceptance items pinned to that file.
 
-## 판정
-컴파일 가능한 상태로 구현 완료 시 SUCCEEDED, 진행 불가면 FAILED.
+## Verdict
+SUCCEEDED when the implementation compiles and is complete; FAILED when
+blocked.

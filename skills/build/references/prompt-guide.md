@@ -1,69 +1,76 @@
-# 노드 프롬프트 작성 가이드
+# Node prompt authoring guide
 
-기본 산출물 구조에서 **역할·전문성은 `.claude/agents/` 에이전트 정의**에 있고
-(작성 규칙: `agent-guide.md`), 노드 프롬프트는 **태스크 입력과 판정 기준**만
-정의한다 — "무엇을 받아 무엇을 하고, 무엇이면 성공인가".
-상태 보고 형식(GRAPH_STATUS/GRAPH_OUTPUT 문법)은 러너가 자동 주입하므로
-프롬프트에 다시 쓰지 않는다 — **판정 기준과 키 규약만** 쓴다.
-(에이전트 정의 없이 프롬프트 단독으로 쓰는 노드라면 역할 절을 프롬프트에 포함한다.)
+In the default output structure, **roles and expertise live in
+`.claude/agents/` definitions** (rules: `agent-guide.md`), and node prompts
+define only the **task input and verdict criteria** — what comes in, what to
+do, what counts as success.
+The status report syntax (GRAPH_STATUS/GRAPH_OUTPUT) is injected by the
+runner automatically; never repeat it. Write only the **verdict criteria and
+key contract**.
+(A node used without an agent definition carries its role section in the
+prompt instead.)
 
-## 공통 구조 (모든 kind)
+## Common structure (all kinds)
 
 ```markdown
-# 역할/태스크: <이름>
+# Role/Task: <name>
 
-## 요구사항 / 입력
-{{vars.requirement}}          ← 변수 치환 활용
+## Requirement / input
+{{vars.requirement}}          ← use variable substitution
 
-## 작업
-1. ...구체적 절차...
-   (선행 노드 출력은 "하단 컨텍스트"로 자동 주입된다 — 어느 노드의
-    산출물을 어떻게 쓸지 명시하라)
+## Work
+1. ...concrete steps...
+   (Upstream outputs are auto-injected as context below — state which
+    node's artifact is used and how.)
 
-## 산출물
-무엇을 응답 본문에 남겨야 하는지.
+## Deliverable
+What must appear in the response body.
 
-## 판정
-- SUCCEEDED 조건: ...
-- FAILED 조건: ... (FAILED 가 어느 엣지로 라우팅되는지 알고 쓰면 좋다)
-- 분기 키가 있으면: GRAPH_OUTPUT 에 어떤 키를 어떤 값으로 담는지.
-  예: GRAPH_OUTPUT: {"route": "heavy"}  /  {"failed_items": "A3,A5"}
+## Verdict
+- SUCCEEDED when: ...
+- FAILED when: ... (knowing which edge consumes FAILED helps)
+- If there is a routing key: which GRAPH_OUTPUT keys carry which values.
+  e.g. GRAPH_OUTPUT: {"route": "heavy"}  /  {"failed_items": "A3,A5"}
 ```
 
-## kind: development — 개발 팀 프롬프트
+## kind: development — dev-team prompts
 
-역할 분리형. 각 노드는 개발 팀의 한 역할이다. 반드시 포함할 것:
+Role-separated. Each node is one role on a development team. Must include:
 
-| 노드 역할 | 핵심 규약 |
+| Node role | Core contract |
 |---|---|
-| 설계(architect/analyst) | 작업 분할 + **병렬 갈래 간 인터페이스(시그니처·타입) 확정** + 검증 가능한 **acceptance 기준(`A1, A2…` ID)** + 미확정 사항은 "가정" 절로 문서화 (headless 는 질문 불가) |
-| 구현(implement) | 설계 인터페이스 준수(병렬 노드가 같은 기준으로 작업 중) + 설계-코드 불일치 시 임의 우회 금지·명시 + **재실행(피드백) 시 FAIL 항목만 수정** (전체 재구현 금지 — 회귀 방지) |
-| 테스트/QA | 컴파일 게이트 먼저 + **acceptance 항목별 PASS/FAIL 판정표** + FAIL 에는 재현·원인 위치 명시(구현 노드가 이 보고만 보고 수정) + 구현 코드 직접 수정 금지 + 실행 안 한 검증을 통과로 보고 금지 |
-| 리뷰(review) | APPROVE=SUCCEEDED / REQUEST_CHANGES=FAILED 매핑 명시 + 지적에 파일:라인·요구 수정 + minor 는 판정에 미반영 + QA 와 중복 검증 금지 |
-| 에스컬레이션(escalate) | 루프 소진 시 양쪽 근거 병기 보고서 — `exhausted:` 대상 노드는 실행 후 러너가 자동으로 실패 종결 |
+| Design (architect/analyst) | Work split + **freeze the interfaces (signatures, types) between parallel branches** + verifiable **acceptance criteria (`A1, A2…` ids)** + undecided items recorded as assumptions (headless nodes cannot ask) |
+| Implementation (implement) | Follow the frozen interfaces (parallel nodes build against them) + never work around design-code mismatches silently — record them + **on rerun (feedback), fix only the FAIL items** (no full rewrites — prevents regressions) |
+| Test/QA | Compile gate first + **per-acceptance-item PASS/FAIL table** + FAIL items carry reproduction and cause location (the implement node fixes from this report alone) + never edit implementation code + never report unexecuted checks as passed |
+| Review (review) | State the APPROVE=SUCCEEDED / REQUEST_CHANGES=FAILED mapping + findings carry file:line and the required fix + minors are recorded, not verdict-affecting + no duplicate verification with QA |
+| Escalation (escalate) | On loop exhaustion, a report presenting both sides' evidence — `exhausted:` target nodes auto-fail the run after finishing |
 
-피드백 루프 규약: 판정 노드(테스트/QA/리뷰)는 FAILED 보고 시
-`GRAPH_OUTPUT: {"failed_items": "A3,A5"}` 로 실패 항목을 남기고,
-구현 노드 프롬프트에는 "재실행 시 FAIL 항목만 수정" 절을 넣는다.
+Feedback-loop contract: verdict nodes (test/QA/review) report failures as
+`GRAPH_OUTPUT: {"failed_items": "A3,A5"}`, and implement-node prompts carry a
+"fix only FAIL items on rerun" section.
 
-## kind: workflow — 태스크 체인 프롬프트
+## kind: workflow — task-chain prompts
 
-절차형. 각 노드는 배치 잡/태스크 하나다. 반드시 포함할 것:
+Procedural. Each node is one batch job/task. Must include:
 
-- **절차**: 번호 매긴 단계. 입력(선행 노드 산출물)과 출력을 명시
-- **멱등성**: 재실행(resume·피드백) 시 중복 처리가 없어야 한다는 규칙
-- **실패 판정**: 무엇이 FAILED 인지 (부분 실패 처리 방침 포함 — 후속
-  태스크가 불완전 데이터 위에서 돌면 안 되는 경우 FAILED 로)
-- **분기 키**: 조건 분기가 걸린 노드는 GRAPH_OUTPUT 키·값 목록을 명시
+- **Procedure**: numbered steps; state inputs (upstream artifacts) and outputs.
+- **Idempotency**: reruns (resume, feedback) must not double-process.
+- **Failure verdict**: what counts as FAILED (including partial-failure
+  policy — fail when downstream must not run on incomplete data).
+- **Routing keys**: nodes with conditional branches list their GRAPH_OUTPUT
+  keys and values.
 
-## 기존 하네스 스킬 → 그래프 변환 시
+## Converting an existing harness skill to a graph
 
-오케스트레이터형 하네스 스킬을 변환할 때의 대응:
+Mapping when converting an orchestrator-style harness skill:
 
-- Phase/서브 에이전트 → 노드. 전용 에이전트 정의가 있으면 노드 `agent:` 필드로
-  재사용하고, 프롬프트에는 **태스크 입력만** 쓴다 (역할은 에이전트 정의에 있음)
-- 병렬 팀 → `parallel` 블록 (Fan-Out + 다음 스텝 Fan-In)
-- 수렴 루프 / "N회 연속 실패 시 중단" → `max: N` + `exhausted: <보고 노드>` (실행 후 자동 실패 종결)
-- 대화형 게이트(AskUserQuestion 스펙 확정 등) → `gate: true` 노드
-  (일시정지 → 확정 → `--resume` + `--var` 주입, templates/pipeline-dev 참조)
-- 커밋/머지는 그래프에 넣지 않는다 (END 이후 수동)
+- Phases/subagents → nodes. If dedicated agent definitions exist, reuse them
+  via the node `agent:` field and keep the prompt to **task input only**
+  (the role lives in the agent definition).
+- Parallel teams → `parallel` blocks (fan-out + fan-in at the next step).
+- Convergence loops / "stop after N consecutive failures" →
+  `max: N` + `exhausted: <report node>` (auto-fails after it runs).
+- Interactive gates (spec confirmation via AskUserQuestion) → `gate: true`
+  nodes (pause → confirm → `--resume` + `--var` injection; see
+  templates/pipeline-dev).
+- Commits and merges stay out of the graph (manual, after END).

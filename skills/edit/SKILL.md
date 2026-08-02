@@ -1,68 +1,73 @@
 ---
 name: edit
-description: 설치된 그래프 파이프라인의 구성 변경과 진단 스킬. 노드나 에이전트의 추가와 제거, 분기·루프·판정 기준 조정, 파이프라인 실행 실패의 원인 분석에 사용한다. 새 오케스트레이션 구축은 agent-pipeline-builder:build 가 담당한다.
+description: Changes and diagnoses installed graph pipelines. Use for adding or removing nodes and agents, adjusting branches, loops, or pass/fail criteria, and analyzing why a pipeline run failed. Building a new orchestration belongs to agent-pipeline-builder:build.
 ---
 
-# agent-pipeline-builder:edit — 파이프라인 구성 변경·진단
+# agent-pipeline-builder:edit — change and diagnose a pipeline
 
-설치된 오케스트레이션의 **yml·프롬프트·에이전트를 안전하게 바꾼다.**
-원칙: 변경은 3계층(흐름=yml, 태스크 입력=prompts, 역할=agents)을 동기화하고,
-반드시 mock 으로 검증한 뒤 끝낸다.
+Change the yml, prompts, and agents of an installed orchestration **safely**.
+Principles: keep the three layers in sync (flow = yml, task input = prompts,
+roles = agents), and never finish a change without a mock verification.
 
-## 절차
+## Procedure
 
-### 1. 대상 파악
+### 1. Locate the target
 
-`.claude/skills/*/pipeline.yml` 을 찾는다. 여러 개면 사용자에게 확인.
-DSL 문법이 필요하면 이 스킬 기준 `../build/references/yml-spec.md` 를 읽는다.
-현재 구조를 `--mermaid` 로 확인하고, 변경 전 상태로 기억해 둔다.
+Find `.claude/skills/*/pipeline.yml`. If there are several, confirm with the
+user. When DSL syntax is needed, read `../build/references/yml-spec.md`
+relative to this skill. Inspect the current structure with `--mermaid` and
+keep it as the before-state.
 
-### 2. 변경 설계 — 유형별 체크리스트
+### 2. Design the change — per-type checklist
 
-| 요청 | 변경할 것 |
+| Request | What to change |
 |---|---|
-| 노드(단계) 추가 | ① yml `nodes` 항목 + `workflow` 내 위치 ② `prompts/<노드>.md` 생성 ③ 전용 역할이 필요하면 `.claude/agents/<prefix>-*.md` (build 스킬의 `templates/agents/` 참고) |
-| 노드 제거 | yml 에서 노드·해당 스텝 제거 + goto/branch 가 그 노드를 가리키지 않는지 확인 (`--validate` 가 잡는다) + 고아 프롬프트 삭제 |
-| 루프 조정 | 해당 노드의 `max` / `exhausted` 값 (if/goto 부착 또는 loop 블록) |
-| 분기 추가·변경 | 상태 체크는 노드 부착 `{if, goto}`, 다중 케이스는 `branch:` — 케이스 전수 정의(미매칭 = 데드락), 합류점 `join: any` 확인 |
-| 병렬화 | 순차 노드를 `parallel: [...]` 로 묶고 인터페이스 확정 책임을 선행 노드 프롬프트에 명시 |
-| 판정 기준 변경 | `prompts/<노드>.md` 의 판정 절 + GRAPH_OUTPUT 키를 쓰는 엣지 조건 동기화 |
-| 에이전트 변경 | `.claude/agents/<이름>.md` (모델·도구·역할) — yml `agent:` 값과 name 일치 유지 |
-| 실패 진단 | `.graph-runs/<run-id>/state.json` 의 실패 노드·사유 → `outputs/<노드>.iterN.md` 전문 확인 → 원인이 프롬프트/에이전트/흐름 중 어디인지 판정 |
+| Add a node (stage) | ① a `nodes` entry plus its position in `workflow` ② create `prompts/<node>.md` ③ if a dedicated role is needed, add `.claude/agents/<prefix>-*.md` (see the build skill's `templates/pipeline-dev/agents/`) |
+| Remove a node | Remove the node and its step from the yml, confirm no goto/branch still points at it (`--validate` catches this), delete the orphaned prompt |
+| Adjust a loop | The node's `max` / `exhausted` values (attached if/goto or a loop block) |
+| Add or change a branch | Status checks via node-attached `{if, goto}`; multi-case via `branch:` — define every case (an unmatched case deadlocks) and check the merge point's `join: any` |
+| Parallelize | Wrap sequential nodes in `parallel: [...]` and move the interface-freezing duty into the upstream node's prompt |
+| Change pass/fail criteria | The verdict section of `prompts/<node>.md`, plus any edge conditions using its GRAPH_OUTPUT keys |
+| Change an agent | `.claude/agents/<name>.md` (model, tools, role) — keep `name` matching the yml `agent:` value |
+| Diagnose a failure | `.graph-runs/<run-id>/state.json` for the failed node and reason → the full text in `outputs/<node>.iterN.md` → decide whether the cause is the prompt, the agent, or the flow |
 
-### 3. 적용 및 검증 (필수)
+### 3. Apply and verify (mandatory)
 
 ```bash
-PL=.claude/skills/<파이프라인명>
+PL=.claude/skills/<pipeline-name>
 python3 $PL/scripts/run_graph.py $PL/pipeline.yml --validate
-python3 $PL/scripts/run_graph.py $PL/pipeline.yml --mermaid    # 변경 후 구조를 사용자에게 제시
-# 바뀐 경로를 mock 으로 통과시킨다 (분기·루프가 실제로 그 길로 도는지):
-python3 $PL/scripts/run_graph.py $PL/pipeline.yml --mock --mock-status <노드>=FAILED,SUCCEEDED
-python3 $PL/scripts/run_graph.py $PL/pipeline.yml --mock --mock-output '<노드>={"key": "값"}'
+python3 $PL/scripts/run_graph.py $PL/pipeline.yml --mermaid    # show the new structure to the user
+# Drive the changed path through a mock (prove the branch/loop actually takes it):
+python3 $PL/scripts/run_graph.py $PL/pipeline.yml --mock --mock-status <node>=FAILED,SUCCEEDED
+python3 $PL/scripts/run_graph.py $PL/pipeline.yml --mock --mock-output '<node>={"key": "value"}'
 ```
 
-### 4. 변경 이력 기록 (필수)
+### 4. Record the change (mandatory)
 
-파이프라인 디렉토리의 `CHANGELOG.md` 에 한 줄을 추가한다 (없으면 생성):
+Append one row to `CHANGELOG.md` in the pipeline directory (create it if missing):
 
 ```markdown
-| 날짜 | 요청 | 변경 파일 |
+| Date | Request | Files changed |
 |---|---|---|
-| 2026-07-31 | 보안 검사 노드 추가 | pipeline.yml, prompts/security.md |
+| 2026-07-31 | add security-scan node | pipeline.yml, prompts/security.md |
 ```
 
-같은 유형의 변경 요청이 반복되면(2회+) 근본 원인(프롬프트 판정 기준·에이전트
-역할·흐름 설계)을 짚어 구조적 수정을 제안한다.
+When the same kind of change request repeats (2+ times), identify the root
+cause (prompt criteria, agent role, or flow design) and propose a structural
+fix.
 
-### 5. 보고
+### 5. Report
 
-변경 전/후 mermaid 비교, 수정 파일 목록, mock 검증 결과, 트리거 문구가
-바뀌어야 하면 CLAUDE.md 마커 블록 갱신 여부를 보고한다.
+Report the before/after mermaid comparison, the changed file list, the mock
+verification results, and whether the CLAUDE.md marker block needs a wording
+update.
 
-## 주의
+## Cautions
 
-- `scripts/run_graph.py` 는 수정하지 않는다 — 엔진 버그·기능 요구는
-  agent-pipeline-builder 플러그인 쪽 이슈다.
-- 노드 실패를 처리하는 엣지가 없으면 파이프라인 즉시 실패가 **기본 동작**이다
-  — 무조건 실패 분기를 추가하지 말고 그 동작이 맞는지 먼저 판단한다.
-- 검증 없이 변경을 끝내지 않는다. mock 을 건너뛴 변경은 미완성이다.
+- Never modify `scripts/run_graph.py` — engine bugs and feature requests
+  belong to the agent-pipeline-builder plugin.
+- A node failure with no edge handling it fails the pipeline immediately —
+  that is the **default behavior**. Judge whether that is correct before
+  reflexively adding a failure branch.
+- Never finish a change without verification. A change without a mock run is
+  incomplete.

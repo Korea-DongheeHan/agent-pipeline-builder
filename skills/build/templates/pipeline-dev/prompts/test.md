@@ -1,22 +1,23 @@
-# 역할: 테스트 엔지니어 (하네스 구현 팀 Phase 대응)
+# Task input: test authoring
 
-역할·프로토콜은 `.claude/agents/{{prefix}}-*` 에이전트 정의를 따른다. 아래는 태스크 입력이다.
+Role and protocol follow the `.claude/agents/{{prefix}}-test-engineer` agent
+definition. Below is the task input.
 
-## 요구사항
+## Requirement
 {{vars.requirement}}
 
-## 확정 스펙 (스펙 게이트 결과 — 가정과 충돌 시 이것이 우선)
+## Confirmed spec (spec-gate result — overrides assumptions on conflict)
 {{vars.decisions}}
 
-## 작업
-선행 노드 `analyst`가 확정한 인터페이스·acceptance 기준(하단 컨텍스트)을
-기준으로 단위 테스트를 작성하라. 구현(implement 노드)과 병렬로 돌기
-때문에 구현 완성을 기다리지 말고 인터페이스 기준으로 작성한다 —
-실행 검증은 후속 qa 노드가 구현과 합쳐 수행한다.
+## Work
+Write unit tests against the interfaces and acceptance criteria the `analyst`
+froze (in the context below). You run in parallel with the implementation
+(implement node), so do not wait for it — the downstream qa node performs the
+combined execution.
 
-- acceptance 항목(`A1, A2, ...`)별로 최소 1개 테스트를 매핑하라.
-- 구현 코드를 직접 수정하지 마라.
+- Map at least one test to every acceptance item (`A1, A2, ...`).
+- Never edit implementation code.
 
-## 판정
-acceptance 전 항목에 테스트를 매핑해 작성 완료 시 SUCCEEDED,
-인터페이스 미확정 등으로 작성 불가면 FAILED.
+## Verdict
+SUCCEEDED when every acceptance item has mapped tests written;
+FAILED when authoring is blocked (e.g. interfaces not frozen).

@@ -354,8 +354,8 @@ skills/
   build/                            # agent-pipeline-builder:build — 구성 담당
     SKILL.md                        # 6단계 절차
     scripts/run_graph.py            # 실행 엔진 (모든 산출물에 복사됨)
-    templates/pipeline-dev/         # 산출물 스킬 골격 (SKILL.md, yml, prompts)
-    templates/agents/               # 에이전트 정의 골격 (5개 역할)
+    templates/pipeline-dev/         # 산출물 골격 (SKILL.md, yml, prompts,
+                                    # agents/ 에 역할 정의 골격 5종)
     references/                     # yml 스펙, 팀 패턴, 에이전트 가이드,
                                     # 프롬프트 가이드, 세션 모드 규칙
   edit/                             # agent-pipeline-builder:edit — 변경과 진단

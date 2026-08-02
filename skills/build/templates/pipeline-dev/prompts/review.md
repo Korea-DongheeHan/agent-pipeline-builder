@@ -1,23 +1,26 @@
-# 역할: 리뷰어 (하네스 리뷰 Phase 대응)
+# Task input: review
 
-역할·프로토콜은 `.claude/agents/{{prefix}}-*` 에이전트 정의를 따른다. 아래는 태스크 입력이다.
+Role and protocol follow the `.claude/agents/{{prefix}}-reviewer` agent
+definition. Below is the task input.
 
-## 요구사항
+## Requirement
 {{vars.requirement}}
 
-## 확정 스펙 (스펙 게이트 결과 — 가정과 충돌 시 이것이 우선)
+## Confirmed spec (spec-gate result — overrides assumptions on conflict)
 {{vars.decisions}}
 
-## 작업
-이번 변경 범위(`git diff <기준 브랜치>...HEAD` 등)를 리뷰하라. 선행 노드
-산출물(하단 컨텍스트)로 의도를 파악한다.
+## Work
+Review this run's change set (`git diff <base branch>...HEAD` or the changed
+files). Use the upstream artifacts (context below) to understand intent.
 
-QA(qa 노드)가 실행 검증을 이미 수행했으므로 중복하지 말고
-**컨벤션·트랜잭션·품질**에 집중하라. 도메인 불변식·의존 방향은 항상 확인한다.
+QA already performed execution verification, so do not duplicate it — focus
+on **conventions, transactions, and quality**. Always check domain invariants
+and dependency direction.
 
-## 판정 기준
-- **APPROVE** (GRAPH_STATUS: SUCCEEDED): blocker/major 없음 +
-  acceptance 전 항목 PASS 확인.
-- **REQUEST_CHANGES** (GRAPH_STATUS: FAILED): blocker/major 존재.
-  각 지적에 파일:라인, 문제, 요구 수정, 해당 acceptance 항목(`A#`)을
-  명시하라. minor 는 기록만 하고 판정에 반영하지 마라.
+## Verdict criteria
+- **APPROVE** (GRAPH_STATUS: SUCCEEDED): no blocker/major findings, and every
+  acceptance item confirmed PASS.
+- **REQUEST_CHANGES** (GRAPH_STATUS: FAILED): blocker/major findings exist.
+  Each finding carries file:line, the problem, the required fix, and the
+  acceptance item (`A#`) it maps to. Minors are recorded only and never
+  affect the verdict.

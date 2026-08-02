@@ -359,8 +359,8 @@ skills/
   build/                            # agent-pipeline-builder:build — the scaffolder
     SKILL.md                        # 6-phase procedure
     scripts/run_graph.py            # the engine (copied into every output)
-    templates/pipeline-dev/         # output skill skeleton (SKILL.md, yml, prompts)
-    templates/agents/               # agent definition skeletons (5 roles)
+    templates/pipeline-dev/         # output skeleton (SKILL.md, yml, prompts,
+                                    # agents/ — 5 role definition skeletons)
     references/                     # yml spec, team patterns, agent guide,
                                     # prompt guide, session-mode rules
   edit/                             # agent-pipeline-builder:edit — change & diagnose

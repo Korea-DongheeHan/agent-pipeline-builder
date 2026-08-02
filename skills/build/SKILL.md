@@ -1,147 +1,164 @@
 ---
 name: build
-description: 멀티 에이전트 개발 오케스트레이션을 프로젝트에 구축하는 메타 스킬. 에이전트 팀이나 그래프 파이프라인을 새로 구성하거나 기존 하네스 스킬을 그래프로 변환하는 작업에 사용한다. 설치된 파이프라인의 변경은 agent-pipeline-builder:edit 가 담당한다.
+description: Meta-skill that builds a multi-agent development orchestration into a project. Use when composing a new agent team or graph pipeline, or when converting an existing orchestrator harness skill into a graph. Changes to an installed pipeline belong to agent-pipeline-builder:edit.
 ---
 
-# agent-pipeline-builder:build — 개발 오케스트레이션 구성
+# agent-pipeline-builder:build — compose a development orchestration
 
-도메인 설명 한 문장에서 **프로젝트에서 독자적으로 동작하는 개발 오케스트레이션**을
-만든다. 이 스킬은 구성할 때만 쓰이고, 산출물은 플러그인 없이 실행된다.
+Turn a one-sentence domain description into a development orchestration that
+runs on its own inside the project. This skill is used only at composition
+time; the output runs without the plugin.
 
-## 산출물 구조 (최종 output — 이 구조를 반드시 완성한다)
+## Output structure (complete ALL of this)
 
 ```
 <project>/
-  CLAUDE.md                              # ① 개발 요청 시 오케스트레이션 사용 명시
+  CLAUDE.md                              # ① trigger rule for dev requests
   .claude/
-    skills/<파이프라인명>/                # ② 메인 오케스트레이션 스킬 (기본명: <도메인>-pipeline-dev)
-      SKILL.md                           #    실행 절차 (러너/세션 모드)
-      pipeline.yml                       #    흐름 SSOT — 사용자가 yml 로 추가·변경
-      prompts/*.md                       #    노드별 태스크 입력·판정 기준
-      scripts/run_graph.py               #    세션을 수행하는 실행 엔진 (복사본)
-      references/session-mode.md         #    트리 UI 모드 해석 규칙 (복사본)
-    agents/<prefix>-*.md                 # ③ 에이전트 구성 (역할·모델·도구)
+    skills/<pipeline-name>/              # ② main orchestration skill (default name: <domain>-pipeline-dev)
+      SKILL.md                           #    run procedure (runner/session modes)
+      pipeline.yml                       #    flow SSOT — users add and change it in YAML
+      prompts/*.md                       #    per-node task input and pass/fail criteria
+      scripts/run_graph.py               #    execution engine (copy)
+      references/session-mode.md         #    interpretation rules for the observable mode (copy)
+    agents/<prefix>-*.md                 # ③ agent team (role, model, tools)
 ```
 
-역할 분담: **흐름 = yml, 역할 = agents, 태스크 입력 = prompts** — 상세 기준은
-`references/agent-guide.md`. 같은 내용을 두 곳에 쓰지 않는다.
+Division of labor: **flow = yml, roles = agents, task input = prompts**.
+Details in `references/agent-guide.md`. Never write the same content in two places.
 
-## Phase 0: 현황 감사 (실행 모드 판별)
+## Phase 0: audit (decide the run mode)
 
-무엇이든 만들기 전에 기존 산출물을 감사하고 실행 모드를 정한다:
+Before creating anything, audit what already exists:
 
-- 확인: `.claude/skills/*/pipeline.yml`(설치된 파이프라인), `.claude/agents/`,
-  CLAUDE.md 의 `agent-pipeline-builder:*` 마커 블록
-- **정합성(drift) 점검** — 발견한 산출물끼리 어긋나면(yml 의 `agent:` 가
-  없는 에이전트를 가리킴, 마커는 있는데 스킬 디렉토리가 없음 등) 먼저 보고한다
+- Check `.claude/skills/*/pipeline.yml` (installed pipelines), `.claude/agents/`,
+  and `agent-pipeline-builder:*` marker blocks in CLAUDE.md.
+- **Drift check** — if the artifacts disagree with each other (a yml `agent:`
+  points to a missing agent, a marker exists without a skill directory, and so
+  on), report it first.
 
-| 상태 | 모드 |
+| State | Mode |
 |---|---|
-| 산출물 없음 | **신규 구축** — Phase 1 부터 진행 |
-| 파이프라인 있음 + 새 파이프라인/노드·에이전트 추가 요구 | **확장** — 기존 이름·에이전트와 충돌하지 않게 Phase 1 부터 진행 (중복 생성 금지) |
-| 파이프라인 있음 + 변경·수정·진단 요구 | **유지보수 — 이 스킬을 쓰지 말고 `agent-pipeline-builder:edit` 로 라우팅한다** |
+| No artifacts | **New build** — proceed from Phase 1 |
+| Pipeline exists + request adds a new pipeline/node/agent | **Extend** — proceed from Phase 1 without colliding with existing names or agents (no duplicates) |
+| Pipeline exists + request changes, fixes, or diagnoses it | **Maintenance — do not use this skill; route to `agent-pipeline-builder:edit`** |
 
-## Phase 1: 프로젝트 분석
+## Phase 1: project analysis
 
-스캐폴딩 전에 프로젝트 사실을 수집한다 (에이전트 플레이스홀더의 입력):
+Collect project facts before scaffolding (they feed the agent placeholders):
 
-- 기술 스택, 빌드·테스트 실제 명령 (README/빌드 파일에서 확인, 추측 금지)
-- 레이어 구조·의존 방향·컨벤션 (CLAUDE.md, 컨벤션 문서, 코드 샘플)
-- **컨벤션 문서의 로드 범위 판별** — CLAUDE.md(@참조)·`.claude/rules/`·도메인
-  스킬 안에 있으면 노드 세션에 자동 로드되므로 추가 조치 불필요. **자동 로드
-  밖**의 문서(docs/ 등)에 있으면 Phase 3 에서 역할별 lazy-read 포인터로
-  매핑한다 (`references/agent-guide.md` 의 컨벤션 참조 규칙)
-- **기존 `.claude/agents/` 확인** — 역할이 겹치는 정의가 있으면 재사용 대상
+- Tech stack and the real build/test commands (confirm in README and build
+  files; never guess).
+- Layer structure, dependency direction, and conventions (CLAUDE.md,
+  convention docs, code samples).
+- **Determine the load scope of convention docs** — anything inside
+  CLAUDE.md (@refs), `.claude/rules/`, or domain skills auto-loads into node
+  sessions, so no action is needed. Docs outside auto-load scope (e.g. docs/)
+  get per-role lazy-read pointers in Phase 3 (see the convention reference
+  rule in `references/agent-guide.md`).
+- **Check existing `.claude/agents/`** — reuse definitions whose roles overlap.
 
-## Phase 2: 팀 설계 (사용자 확인 게이트)
+## Phase 2: team design (user confirmation gate)
 
-`references/team-patterns.md` 의 패턴에서 출발해 노드·에이전트·흐름을 설계한다.
-**표준 기능 개발 요청이면 기본 템플릿을 그대로 쓰는 것이 기본값이다** —
-분석 → **SDD 스펙 게이트(⏸ AskUserQuestion 확정)** → 구현‖테스트 → QA →
-리뷰 + 수렴 루프. 요구가 다를 때만 변형하며, 사람 확인이 필요한 지점에는
-`gate: true` 노드를 쓴다.
+Start from the patterns in `references/team-patterns.md`.
+**For a standard feature-development request, the default template as-is is
+the default choice** — analysis → **SDD spec gate (⏸ confirmed via
+AskUserQuestion)** → implement ‖ test → QA → review, with convergence loops.
+Deviate only when the request differs, and place a `gate: true` node wherever
+a human must confirm.
 
-노드는 **3~8개를 권장**한다 — 그보다 크면 파이프라인을 나누거나(단계별 별도
-파이프라인) 노드를 병합한다. 노드가 많을수록 세션 비용과 루프 폭이 커진다.
+Prefer **3–8 nodes** — beyond that, split the pipeline (one per stage) or
+merge nodes. More nodes mean more session cost and wider loops.
 
-사용자에게 확인받을 것: ① 노드/에이전트 표(역할·모델) ② 흐름 mermaid
-(pipeline.yml 초안으로 `--mermaid` 생성) ③ 파이프라인명(기본 `<도메인>-pipeline-dev` — 도메인 슬러그는
-에이전트 접두어와 동일하게) ④ **기본 실행 모드** —
-러너(권장: 무인·결정적·resume·오케스트레이션 비용 0) vs
-세션(서브에이전트 화면 실시간 관찰·개입 가능, resume 없음·메인 세션 오버헤드).
-선택은 산출물 pipeline.yml 의 `settings.mode` 에 기록되고, 실행 시마다
-말로 오버라이드할 수 있음을 함께 안내한다. ⑤ **산출물 언어** — 프로젝트
-문서의 주 언어를 감지해 기본값으로 제안한다(en | ko). 러너 로그는
-`settings.lang` 으로 바뀌고, SKILL.md·프롬프트·에이전트 정의도 이 언어로
-생성한다.
+Confirm with the user: ① the node/agent table (roles, models) ② the flow as a
+mermaid diagram (generate with `--mermaid` from the draft pipeline.yml)
+③ the pipeline name (default `<domain>-pipeline-dev`, with the domain slug
+matching the agent prefix) ④ the **default execution mode** — runner
+(recommended: unattended, deterministic, resume, zero orchestration cost) vs
+session (live subagent view and intervention; no resume, main-session
+overhead). The choice is recorded in `settings.mode` of the output
+pipeline.yml and can be overridden verbally per run. ⑤ the **output
+language** — detect the project's primary documentation language and propose
+it as the default (en | ko). `settings.lang` switches the runner logs, and the
+SKILL.md, prompts, and agent definitions are generated in this language.
 
-## Phase 3: 에이전트 정의 생성 (`.claude/agents/`)
+## Phase 3: generate agent definitions (`.claude/agents/`)
 
-`templates/agents/*.md` 를 복사해 `<prefix>-<역할>.md` 로 만들고, Phase 1 의
-사실로 **모든 플레이스홀더를 치환**한다 (규칙: `references/agent-guide.md`).
-기존 에이전트가 있으면 생성 대신 재사용하고 yml 의 `agent:` 만 맞춘다.
+Copy `templates/pipeline-dev/agents/*.md` into the project as
+`.claude/agents/<prefix>-<role>.md` and **substitute every
+placeholder** with Phase 1 facts (rules: `references/agent-guide.md`).
+When existing agents cover a role, reuse them instead of generating — only
+align the `agent:` values in the yml.
 
-## Phase 4: 오케스트레이션 스킬 생성 (`.claude/skills/<파이프라인명>/`)
+## Phase 4: generate the orchestration skill (`.claude/skills/<pipeline-name>/`)
 
-`templates/pipeline-dev/` 전체를 복사한 뒤:
+Copy `templates/pipeline-dev/` in full **except its `agents/` directory**
+(that was consumed by Phase 3 and must not land inside the skill), then:
 
-1. `SKILL.md`·`pipeline.yml`·`prompts/*.md` 의 플레이스홀더
-   (`{{pipeline_name}}`, `{{prefix}}`, `{{project_name}}`)를 치환하고,
-   pipeline.yml 의 `settings.lang` 을 Phase 2 에서 선택한 언어로 설정한다.
-   산출물 언어가 한국어가 아니면 템플릿(한국어 원본)의 SKILL.md·프롬프트·
-   에이전트 정의 본문을 선택 언어로 번역해 생성한다.
-   산출물 SKILL.md 의 description 은 **구체적 트리거 상황 + 후속 작업
-   키워드(재실행·수정·보완·피드백 반영)** 를 포함해야 한다 — 템플릿 기본값을
-   프로젝트 용어로 다듬는다
-2. Phase 2 설계가 기본 템플릿과 다르면 workflow·nodes·prompts 를 조정한다
-   (DSL 스펙: `references/yml-spec.md`, 프롬프트 규칙: `references/prompt-guide.md`)
-3. 이 스킬의 `scripts/run_graph.py` 와 `references/session-mode.md` 를
-   그대로 복사한다 (러너 수정 금지 — 독립 실행 보장)
+1. Substitute the placeholders (`{{pipeline_name}}`, `{{prefix}}`,
+   `{{project_name}}`) in `SKILL.md`, `pipeline.yml`, and `prompts/*.md`, and
+   set `settings.lang` in pipeline.yml to the language chosen in Phase 2.
+   When the output language is not English, translate the template bodies
+   (SKILL.md, prompts, agent definitions — the templates are the English
+   source) into the chosen language.
+   The output SKILL.md description must include **concrete trigger situations
+   plus follow-up keywords (rerun, revise, refine, apply feedback)** — adapt
+   the template default to the project's vocabulary.
+2. If the Phase 2 design differs from the default template, adjust workflow,
+   nodes, and prompts (DSL spec: `references/yml-spec.md`; prompt rules:
+   `references/prompt-guide.md`).
+3. Copy this skill's `scripts/run_graph.py` and
+   `references/session-mode.md` verbatim (never modify the runner — it
+   guarantees standalone execution).
 
-## Phase 5: CLAUDE.md 등록 (필수)
+## Phase 5: register in CLAUDE.md (mandatory)
 
-프로젝트 ROOT 의 CLAUDE.md 에 트리거 블록을 추가한다 (없으면 생성,
-같은 마커가 있으면 교체):
+Append a trigger block to the project ROOT CLAUDE.md (create the file if
+missing; replace the block if the same marker exists):
 
 ```markdown
-<!-- agent-pipeline-builder:<파이프라인명> start -->
-## 개발 오케스트레이션: <파이프라인명>
-개발·기능 수정·테스트 보강·리뷰 요구사항 요청 시
-`.claude/skills/<파이프라인명>` 스킬(개발 오케스트레이션)을 사용해 수행하라.
-단일 파일 수준의 얇은 변경은 직접 수행한다.
-<!-- agent-pipeline-builder:<파이프라인명> end -->
+<!-- agent-pipeline-builder:<pipeline-name> start -->
+## Development orchestration: <pipeline-name>
+For development, feature-change, test-hardening, and review requests, use the
+`.claude/skills/<pipeline-name>` skill (development orchestration).
+Perform thin single-file changes directly instead.
+<!-- agent-pipeline-builder:<pipeline-name> end -->
 ```
 
-## Phase 6: 검증·인계 (필수 — 건너뛰지 마라)
+## Phase 6: verify and hand over (mandatory — do not skip)
 
 ```bash
-PL=.claude/skills/<파이프라인명>
+PL=.claude/skills/<pipeline-name>
 python3 $PL/scripts/run_graph.py $PL/pipeline.yml --validate
-python3 $PL/scripts/run_graph.py $PL/pipeline.yml --mock          # 스펙 게이트 PAUSED(exit 3) 확인
+python3 $PL/scripts/run_graph.py $PL/pipeline.yml --mock          # expect spec gate PAUSED (exit 3)
 python3 $PL/scripts/run_graph.py $PL/pipeline.yml --mock \
-  --resume <RUN_ID> --mock-status qa=FAILED,SUCCEEDED             # 게이트 통과 + 수렴 루프 확인
-# 스캐폴딩 플레이스홀더 잔존 = 미완성 ({{vars.*}} 등 런타임 변수는 정상이므로 제외)
+  --resume <RUN_ID> --mock-status qa=FAILED,SUCCEEDED             # gate pass + convergence loop
+# Leftover scaffold placeholders = incomplete ({{vars.*}} etc. are runtime variables, excluded)
 grep -rn "{{" $PL .claude/agents/<prefix>-*.md | grep -v "{{vars\.\|{{run\.\|{{node\."
 ```
 
-**트리거 검증** — 산출물 SKILL.md 의 description 을 놓고 사고 점검한다:
+**Trigger validation** — reason through the output SKILL.md description:
 
-- should-trigger 5개: 이 프로젝트에서 실제로 나올 개발 요청 문장
-  (예: "X 기능 추가해줘", "리뷰 피드백 반영해서 다시")이 트리거되는가
-- should-NOT-trigger 5개: **near-miss** 중심 — "이 함수 뭐하는 거야"(질문),
-  "오타 하나 고쳐줘"(얇은 변경), "빌드 왜 깨져"(진단) 등이 트리거되지 않는가
-- 어긋나면 description 을 수정한다 (트리거 조건과 제외 조건을 명시)
+- 5 should-trigger phrases: real development requests this project would see
+  (e.g. "add feature X", "apply the review feedback and rerun").
+- 5 should-NOT-trigger phrases, centered on **near-misses** — "what does this
+  function do" (a question), "fix this one typo" (a thin change), "why is the
+  build broken" (a diagnosis).
+- If either set misfires, revise the description (state trigger and exclusion
+  conditions).
 
-인계 보고에 포함: 생성 파일 트리, CLAUDE.md 등록 내용, **비용 특성**(노드
-1회 = claude 세션 1개, 최대 세션 수 추정), 실행 모드 2가지(러너=결정적·resume /
-세션=트리 UI 관찰), 컨텍스트 격리 특성, permission-mode 확인, 이후 구성 변경은
-`agent-pipeline-builder:edit` 사용 안내.
+Include in the handover report: the generated file tree, the CLAUDE.md
+registration, the **cost profile** (one node execution = one claude session;
+estimate the maximum session count), the two execution modes (runner =
+deterministic + resume / session = live subagent view), the context-isolation
+property, the permission-mode setting, and that future changes go through
+`agent-pipeline-builder:edit`.
 
-## 참조
+## References
 
-- `references/team-patterns.md` — 팀 아키텍처 패턴 ↔ 그래프 DSL 대응
-- `references/agent-guide.md` — 에이전트 정의 작성·치환 규칙
-- `references/yml-spec.md` — pipeline.yml 전체 스키마·DSL·CLI
-- `references/prompt-guide.md` — 프롬프트 작성 규칙, 기존 하네스 변환 매핑
-- `references/session-mode.md` — 세션 오케스트레이션(트리 UI) 해석 규칙
-- `templates/pipeline-dev/` — 산출물 스킬 골격 / `templates/agents/` — 에이전트 골격
+- `references/team-patterns.md` — team architecture patterns mapped to the graph DSL
+- `references/agent-guide.md` — agent authoring and substitution rules
+- `references/yml-spec.md` — full pipeline.yml schema, DSL, CLI
+- `references/prompt-guide.md` — prompt rules and harness-conversion mapping
+- `references/session-mode.md` — interpretation rules for session (tree-view) orchestration
+- `templates/pipeline-dev/` — output skill skeleton (its `agents/` holds the agent skeletons)

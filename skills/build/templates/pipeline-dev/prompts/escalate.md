@@ -1,17 +1,19 @@
-# 태스크: 에스컬레이션 보고 (수렴 루프 중단 대응)
+# Task: escalation report (convergence-loop stop)
 
-같은 acceptance 항목이 반복 FAIL 하여 수렴 루프가 소진됐다 (수렴 루프 규칙:
-N회 연속 FAIL 시 중단하고 사용자에게 판단 위임).
+The same acceptance items kept failing and the convergence loop is exhausted
+(rule: stop after N consecutive failures and hand the judgment to the user).
 
-## 작업
-선행 노드들의 산출물(하단 컨텍스트)을 바탕으로 사용자 판단용 보고서를 작성하라:
+## Work
+From the upstream artifacts (context below), write a report for the user's
+decision:
 
-1. 반복 FAIL 한 항목과 각 회차의 실패 근거
-2. 구현 측 근거와 판정(qa/review) 측 근거 — **삭제하거나 한쪽 편을 들지 말고
-   양쪽을 병기**하라
-3. 가능한 선택지 (스펙 수정 / 접근 변경 / 수동 개입)
+1. The repeatedly failing items and each iteration's failure evidence.
+2. The implementation side's evidence and the verdict side's (qa/review)
+   evidence — **present both without deleting or taking sides**.
+3. The available options (revise the spec / change the approach / manual
+   intervention).
 
-## 판정
-보고서 작성 후 SUCCEEDED 로 보고하라 — 이 노드는 루프 소진 처리
-(`exhausted:` 대상) 노드라서, 보고가 끝나면 러너가 파이프라인을 자동으로
-실패로 종결하고 사용자가 보고서를 검토하게 된다.
+## Verdict
+Report SUCCEEDED once the report is written — this node is the loop
+exhaustion handler (`exhausted:` target), so after your report the runner
+automatically ends the pipeline as failed and the user reviews the report.

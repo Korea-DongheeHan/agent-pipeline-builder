@@ -1,36 +1,39 @@
-# 태스크 입력: 분석 + SDD 스펙 초안
+# Task input: analysis + SDD spec draft
 
-역할·프로토콜은 `.claude/agents/{{prefix}}-analyst` 에이전트 정의를 따른다.
-아래는 태스크 입력이다.
+Role and protocol follow the `.claude/agents/{{prefix}}-analyst` agent
+definition. Below is the task input.
 
-## 요구사항
+## Requirement
 {{vars.requirement}}
 
-## 작업
-1. 요구사항의 영향 모듈을 분석하고 구현 계획을 세워라.
-2. **스펙 초안(SDD)** 을 작성하라:
-   - 범위 (포함/제외)
-   - 시나리오 (GWT)
-   - 불변식·계약
-   - **acceptance 기준** (`A1, A2, ...` ID — QA·리뷰의 판정 단위)
-   - 가정 (코드·컨벤션으로 결정 가능한 것은 묻지 말고 여기에)
-3. 작업을 두 갈래로 분해하고 갈래 간 인터페이스(시그니처·타입)를 확정하라:
-   - 구현 갈래 (implement 노드) / 테스트 갈래 (test 노드)
+## Work
+1. Analyze the modules the requirement touches and draft the implementation plan.
+2. Write the **SDD spec draft**:
+   - scope (in / out)
+   - scenarios (GWT)
+   - invariants and contracts
+   - **acceptance criteria** (`A1, A2, ...` ids — the verdict units for QA and review)
+   - assumptions (decide from code and conventions instead of asking, and record here)
+3. Split the work into two branches and freeze the interfaces (signatures,
+   types) between them:
+   - implementation branch (implement node) / test branch (test node)
 
-## 스펙 확정 질문 (중요 — 이 파이프라인은 스펙 게이트가 있다)
-이 노드가 끝나면 파이프라인이 **스펙 게이트에서 일시정지**하고, 오케스트레이터가
-네 산출물을 근거로 사용자에게 확정 질문을 한다. 산출물 마지막에
-`## 확정 필요 질문` 섹션을 작성하라:
+## Questions to confirm (important — this pipeline has a spec gate)
+When this node finishes, the pipeline **pauses at the spec gate** and the
+orchestrator asks the user your questions, grounded in your output. End your
+deliverable with a `## Questions to confirm` section:
 
-- **사용자 답이 산출물을 바꾸는 축만** 올려라 — 최대 4개. 축이 2개면 2개만.
-  코드·컨벤션·기존 패턴으로 결정 가능한 것은 질문이 아니라 "가정"이다.
-- 축 우선순위: ① 범위 경계 ② 아키텍처 결정(레이어·포트·의존 방향)
-  ③ 계약/엣지 케이스 ④ 완료 기준(테스트 범위·문서화)
-- 각 질문에 선택지 2~4개와 **권장안(근거 1줄)** 을 붙여라 — 오케스트레이터가
-  그대로 AskUserQuestion 으로 옮긴다.
-- 질문이 하나도 필요 없으면 "확정 필요 질문: 없음 (가정으로 충분)" 이라고 써라.
+- Raise **only the axes where the user's answer changes the deliverable** —
+  at most 4. If there are two axes, ask two. Anything decidable from code,
+  conventions, or existing patterns is an assumption, not a question.
+- Axis priority: ① scope boundary ② architecture decisions (layers, ports,
+  dependency direction) ③ contracts and edge cases ④ done criteria (test
+  scope, documentation).
+- Give each question 2–4 options and a **recommendation with a one-line
+  reason** — the orchestrator forwards them into AskUserQuestion as-is.
+- If no question is needed, write "Questions to confirm: none (assumptions suffice)".
 
-## 판정
-분석·스펙 초안·확정 질문 작성 완료 시 SUCCEEDED,
-요구사항이 모순·구현 불가면 FAILED.
-GRAPH_OUTPUT 에 질문 수를 보고하라. 예: GRAPH_OUTPUT: {"questions": "3"}
+## Verdict
+SUCCEEDED when the analysis, spec draft, and questions are complete;
+FAILED when the requirement is contradictory or infeasible.
+Report the question count via GRAPH_OUTPUT, e.g. GRAPH_OUTPUT: {"questions": "3"}

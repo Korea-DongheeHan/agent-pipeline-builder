@@ -198,13 +198,13 @@ def _flow(s):
     def parse(i):
         i = skip_ws(i)
         if i >= len(s):
-            raise YamlError("flow 표현식이 잘리다: %r" % s)
+            raise YamlError("flow expression truncated: %r" % s)
         if s[i] == "[":
             arr, i = [], i + 1
             while True:
                 i = skip_ws(i)
                 if i >= len(s):
-                    raise YamlError("']' 누락: %r" % s)
+                    raise YamlError("missing ']': %r" % s)
                 if s[i] == "]":
                     return arr, i + 1
                 v, i = parse(i)
@@ -219,7 +219,7 @@ def _flow(s):
             while True:
                 i = skip_ws(i)
                 if i >= len(s):
-                    raise YamlError("'}' 누락: %r" % s)
+                    raise YamlError("missing '}': %r" % s)
                 if s[i] == "}":
                     return d, i + 1
                 j = s.index(":", i)
@@ -270,7 +270,7 @@ class _Mini:
                 continue
             indent = len(line) - len(line.lstrip(" "))
             if "\t" in line[: indent + 1]:
-                raise YamlError("탭 들여쓰기는 지원하지 않는다 (line %d)" % (idx + 1))
+                raise YamlError("tab indentation is not supported (line %d)" % (idx + 1))
             self.toks.append((idx, indent, line.strip()))
 
     def parse(self):
@@ -292,12 +292,12 @@ class _Mini:
             if ind < indent:
                 break
             if ind > indent:
-                raise YamlError("들여쓰기 오류 (line %d): %r" % (idx + 1, txt))
+                raise YamlError("indentation error (line %d): %r" % (idx + 1, txt))
             if ":" not in txt:
-                raise YamlError("매핑이 아니다 (line %d): %r" % (idx + 1, txt))
+                raise YamlError("not a mapping (line %d): %r" % (idx + 1, txt))
             key_part, rest = txt.split(":", 1)
             if rest and not rest.startswith(" "):
-                raise YamlError("'key: value' 형식이 아니다 (line %d): %r" % (idx + 1, txt))
+                raise YamlError("not in 'key: value' form (line %d): %r" % (idx + 1, txt))
             key = _scalar(key_part)
             rest = rest.strip()
             j = i + 1
@@ -315,7 +315,7 @@ class _Mini:
             else:
                 if j != i + 1:
                     raise YamlError(
-                        "스칼라 값 아래에 들여쓰인 줄이 있다 (line %d): %r" % (idx + 1, txt)
+                        "indented lines under a scalar value (line %d): %r" % (idx + 1, txt)
                     )
                 d[key] = _value(rest)
                 i += 1
@@ -346,7 +346,7 @@ class _Mini:
                 arr.append(v)
             else:
                 if j != i + 1:
-                    raise YamlError("시퀀스 항목 파싱 오류 (line %d)" % (idx + 1))
+                    raise YamlError("sequence item parse error (line %d)" % (idx + 1))
                 arr.append(_value(rest))
             i = j
         return arr, i
@@ -452,7 +452,7 @@ def _normalize_when(when):
                     vals = [_expr_operand(r)]
                 conds.append({"type": "OUTPUT", "key": key, "in": vals})
             else:
-                raise PipelineError("알 수 없는 when 표현식: %r" % c)
+                raise PipelineError("unknown when expression: %r" % c)
         elif isinstance(c, dict):
             c = dict(c)
             c["type"] = str(c.get("type", "STATUS")).upper()
@@ -460,7 +460,7 @@ def _normalize_when(when):
                 c["status"] = str(c.get("status", "SUCCEEDED")).upper()
             conds.append(c)
         else:
-            raise PipelineError("when 조건 형식 오류: %r" % c)
+            raise PipelineError("malformed when condition: %r" % c)
     return conds
 
 
@@ -495,8 +495,8 @@ def _exhausted_value(spec):
     exh = spec.get("exhausted", "FAIL")
     if isinstance(exh, (list, dict)):
         raise PipelineError(
-            "exhausted 는 FAIL 또는 노드 id 하나다 — 노드는 실행 후 "
-            "(후속 엣지가 없으면) 자동으로 실패 종결된다: %r" % exh
+            "exhausted takes FAIL or a single node id — the node auto-fails "
+            "the run after it finishes (unless an edge matches): %r" % exh
         )
     return str(exh)
 
@@ -549,7 +549,7 @@ def compile_workflow(wf, mark_join_any, mark_fail_after):
             placed.add(s)
             return [s], [s]
         if not isinstance(step, dict) or len(step) != 1:
-            raise PipelineError("workflow 스텝 형식 오류: %r" % step)
+            raise PipelineError("malformed workflow step: %r" % step)
         kind, spec = next(iter(step.items()))
         if kind == "parallel":
             entries, exits = [], []
@@ -558,13 +558,13 @@ def compile_workflow(wf, mark_join_any, mark_fail_after):
                 entries += en
                 exits += ex
             if not entries:
-                raise PipelineError("parallel 블록이 비어 있다")
+                raise PipelineError("empty parallel block")
             return entries, exits
         if kind == "loop":
             spec = spec or {}
             body = spec.get("body") or []
             if not body:
-                raise PipelineError("loop 블록에는 body 가 필요하다")
+                raise PipelineError("a loop block requires body")
             en, ex = compile_seq(body, None, merge_point)
             redo = [str(r) for r in _as_list(spec.get("redo"))] or list(en)
             loop_cfg = {
@@ -574,7 +574,7 @@ def compile_workflow(wf, mark_join_any, mark_fail_after):
             body_ids = _seq_node_ids(body)
             missing = [r for r in redo if r not in body_ids]
             if missing:
-                raise PipelineError("loop redo 대상이 body 에 없다: %s" % ", ".join(missing))
+                raise PipelineError("loop redo target not in body: %s" % ", ".join(missing))
             # redo 대상이 속한 스텝 '이후' 스텝의 노드들이 FAILED 면 redo 로 피드백
             redo_step = 0
             for i, st in enumerate(body):
@@ -586,8 +586,8 @@ def compile_workflow(wf, mark_join_any, mark_fail_after):
                 connect([s], redo, when="FAILED", loop=loop_cfg)
             return en, ex
         if kind == "branch":
-            raise PipelineError("branch 는 선행 노드가 필요하다 — 시퀀스 안에서만 쓸 수 있다")
-        raise PipelineError("알 수 없는 workflow 블록: %r" % kind)
+            raise PipelineError("branch needs an upstream node — usable only inside a sequence")
+        raise PipelineError("unknown workflow block: %r" % kind)
 
     def compile_seq(steps, prev_exits, merge_first):
         """스텝 시퀀스 → (첫 스텝 entries, 마지막 exits). prev_exits 와 자동 연결."""
@@ -650,19 +650,19 @@ def compile_workflow(wf, mark_join_any, mark_fail_after):
             if isinstance(step, dict) and "goto" in step:
                 # (호환) 형제 스텝 형태: - if: ... / goto: ... — 직전 노드에 적용
                 if not prev_exits or len(prev_exits) != 1 or prev_exits[0] == START:
-                    raise PipelineError("if/goto 는 단일 선행 노드 바로 뒤에만 올 수 있다")
+                    raise PipelineError("if/goto must directly follow a single node")
                 if not apply_goto(prev_exits[0], step):
                     prev_exits = []
                 continue
             if isinstance(step, dict) and len(step) == 1 and next(iter(step)) == "branch":
                 spec = step["branch"] or {}
                 if not prev_exits or len(prev_exits) != 1 or prev_exits[0] == START:
-                    raise PipelineError("branch 는 단일 선행 노드 바로 뒤에만 올 수 있다")
+                    raise PipelineError("branch must directly follow a single node")
                 src = prev_exits[0]
                 key = _sugar_get(spec, "on")
                 cases = spec.get("cases") or {}
                 if not cases:
-                    raise PipelineError("branch 블록에는 cases 가 필요하다")
+                    raise PipelineError("a branch block requires cases")
                 exits = []
                 for ck, cseq in cases.items():
                     if key is not None:
@@ -675,7 +675,7 @@ def compile_workflow(wf, mark_join_any, mark_fail_after):
                             when = [{"type": "STATUS", "status": u}]
                         else:
                             raise PipelineError(
-                                "branch(on 없음) 케이스 키는 SUCCEEDED|FAILED|ALWAYS: %r" % ck
+                                "branch case keys (without on) must be SUCCEEDED|FAILED|ALWAYS: %r" % ck
                             )
                     en, ex = compile_seq(cseq if isinstance(cseq, list) else [cseq], None, False)
                     connect([src], en, when=when)
@@ -706,7 +706,7 @@ def compile_workflow(wf, mark_join_any, mark_fail_after):
 class Pipeline:
     def __init__(self, doc, yml_path):
         if not isinstance(doc, dict):
-            raise PipelineError("pipeline.yml 최상위는 매핑이어야 한다")
+            raise PipelineError("pipeline.yml top level must be a mapping")
         self.yml_path = Path(yml_path)
         self.name = doc.get("name") or self.yml_path.stem
         self.kind = doc.get("kind", "workflow")
@@ -721,12 +721,12 @@ class Pipeline:
         explicit_join = set()
         for nd in doc.get("nodes") or []:
             if not isinstance(nd, dict) or not nd.get("id"):
-                raise PipelineError("노드에는 id가 필요하다: %r" % nd)
+                raise PipelineError("a node requires an id: %r" % nd)
             nid = str(nd["id"])
             if nid in (START, END, FAIL):
-                raise PipelineError("노드 id로 %s 는 예약어다" % nid)
+                raise PipelineError("node id %s is reserved" % nid)
             if nid in self.nodes:
-                raise PipelineError("노드 id 중복: %s" % nid)
+                raise PipelineError("duplicate node id: %s" % nid)
             if "join" in nd:
                 explicit_join.add(nid)
             self.nodes[nid] = {
@@ -761,16 +761,16 @@ class Pipeline:
         seen_sig = set()  # 완전 동일 엣지 중복 제거 (loop 중복은 카운터가 2배가 되므로 실해악)
         for i, ed in enumerate(raw_edges):
             if not isinstance(ed, dict):
-                raise PipelineError("엣지 형식 오류: %r" % ed)
+                raise PipelineError("malformed edge: %r" % ed)
             srcs = [str(s) for s in _as_list(ed.get("from"))]
             dsts = [str(t) for t in _as_list(ed.get("to"))]
             if not srcs or not dsts:
-                raise PipelineError("엣지에는 from/to 가 필요하다: %r" % ed)
+                raise PipelineError("an edge requires from/to: %r" % ed)
             when = _normalize_when(ed.get("when"))
             loop = ed.get("loop")
             if loop is not None:
                 if not isinstance(loop, dict) or int(loop.get("max", 0)) < 1:
-                    raise PipelineError("loop 에는 max(>=1)가 필요하다: %r" % ed)
+                    raise PipelineError("loop requires max (>=1): %r" % ed)
                 loop = {
                     "max": int(loop["max"]),
                     "on_exhausted": str(loop.get("on_exhausted", "FAIL")),
@@ -812,59 +812,59 @@ class Pipeline:
         ids = set(self.nodes) | {START, END, FAIL}
         for e in self.edges:
             if e["src"] not in ids or e["src"] in (END, FAIL):
-                errors.append("엣지 %s: 잘못된 from '%s'" % (e["key"], e["src"]))
+                errors.append("edge %s: invalid from '%s'" % (e["key"], e["src"]))
             if e["dst"] not in ids or e["dst"] == START:
-                errors.append("엣지 %s: 잘못된 to '%s'" % (e["key"], e["dst"]))
+                errors.append("edge %s: invalid to '%s'" % (e["key"], e["dst"]))
             for c in e["when"]:
                 t = c.get("type")
                 if t == "STATUS":
                     if c.get("status") not in VALID_STATUS:
-                        errors.append("엣지 %s: status 는 SUCCEEDED|FAILED" % e["key"])
+                        errors.append("edge %s: status must be SUCCEEDED|FAILED" % e["key"])
                 elif t == "OUTPUT":
                     if not c.get("key"):
-                        errors.append("엣지 %s: OUTPUT 조건에 key 필요" % e["key"])
+                        errors.append("edge %s: OUTPUT condition requires key" % e["key"])
                     if not any(k in c for k in ("equals", "not_equals", "in")):
                         errors.append(
-                            "엣지 %s: OUTPUT 조건에 equals|not_equals|in 필요" % e["key"]
+                            "edge %s: OUTPUT condition requires equals|not_equals|in" % e["key"]
                         )
                 elif t != "ALWAYS":
-                    errors.append("엣지 %s: 알 수 없는 조건 type %r" % (e["key"], t))
+                    errors.append("edge %s: unknown condition type %r" % (e["key"], t))
             if e["loop"] and e["loop"]["on_exhausted"] not in ("FAIL",) and e["loop"][
                 "on_exhausted"
             ] not in self.nodes:
                 errors.append(
-                    "엣지 %s: on_exhausted 는 FAIL 또는 노드 id" % e["key"]
+                    "edge %s: on_exhausted must be FAIL or a node id" % e["key"]
                 )
         if str(self.settings["lang"]) not in MESSAGES:
-            errors.append("settings.lang 는 %s (현재: %r)" % ("|".join(sorted(MESSAGES)), self.settings["lang"]))
+            errors.append("settings.lang must be %s (got %r)" % ("|".join(sorted(MESSAGES)), self.settings["lang"]))
         if str(self.settings["mode"]) not in ("runner", "session"):
-            errors.append("settings.mode 는 runner | session (현재: %r)" % self.settings["mode"])
+            errors.append("settings.mode must be runner | session (got %r)" % self.settings["mode"])
         if not self.nodes:
-            errors.append("노드가 없다")
+            errors.append("no nodes defined")
         for nid, nd in self.nodes.items():
             if nd["join"] not in ("all", "any"):
-                errors.append("노드 %s: join 은 all|any" % nid)
+                errors.append("node %s: join must be all|any" % nid)
             if nd["gate"]:
                 continue  # 게이트 노드는 prompt 불필요
             if nd["type"] not in ("agent", "command"):
-                errors.append("노드 %s: type 은 agent | command" % nid)
+                errors.append("node %s: type must be agent | command" % nid)
                 continue
             if nd["type"] == "command":
                 # 신뢰 경계: run 은 러너가 그대로 실행한다 — yml 은 코드와 동일한 리뷰 대상
                 if not nd["run"]:
-                    errors.append("노드 %s: type: command 에는 run 이 필요하다" % nid)
+                    errors.append("node %s: type: command requires run" % nid)
                 if nd["prompt"]:
-                    errors.append("노드 %s: type: command 는 prompt 대신 run 을 쓴다" % nid)
+                    errors.append("node %s: type: command takes run, not prompt" % nid)
                 continue
             if not nd["prompt"]:
-                errors.append("노드 %s: prompt 가 필요하다" % nid)
+                errors.append("node %s: prompt is required" % nid)
             elif self.resolve_prompt(nd["prompt"]) is None:
                 errors.append(
-                    "노드 %s: 프롬프트 파일을 찾을 수 없다 — %s (cwd 및 yml 위치 기준)"
+                    "node %s: prompt file not found — %s (relative to cwd and the yml directory)"
                     % (nid, nd["prompt"])
                 )
         if not self.out_edges.get(START):
-            errors.append("START 에서 나가는 엣지가 없다")
+            errors.append("no edge leaves START")
 
         # 도달성: START 에서 모든 노드/END 도달 확인
         seen = set()
@@ -880,9 +880,9 @@ class Pipeline:
                     stack.append(e["loop"]["on_exhausted"])
         for nid in self.nodes:
             if nid not in seen:
-                errors.append("노드 %s: START 에서 도달 불가" % nid)
+                errors.append("node %s: unreachable from START" % nid)
         if END not in seen:
-            errors.append("END 에 도달하는 경로가 없다")
+            errors.append("no path reaches END")
 
         # 사이클 검증: loop 없는 엣지만으로는 DAG 여야 한다
         indeg = {n: 0 for n in list(self.nodes) + [START, END, FAIL]}
@@ -903,7 +903,7 @@ class Pipeline:
         if visited < len(indeg):
             stuck = [n for n, d in indeg.items() if d > 0]
             errors.append(
-                "loop 설정 없는 사이클 발견: %s — 피드백 엣지에는 loop: {max: N} 을 붙여라"
+                "cycle without loop config: %s — attach loop: {max: N} to feedback edges"
                 % ", ".join(sorted(stuck))
             )
         return errors, warnings
@@ -944,13 +944,13 @@ class Runner:
         self.mock_plan = {}
         for spec in args.mock_status or []:
             if "=" not in spec:
-                raise PipelineError("--mock-status 형식: node=STATUS[,STATUS...]")
+                raise PipelineError("--mock-status format: node=STATUS[,STATUS...]")
             nid, seq = spec.split("=", 1)
             self.mock_plan[nid.strip()] = [s.strip().upper() for s in seq.split(",")]
         self.mock_outputs = {}
         for spec in getattr(args, "mock_output", None) or []:
             if "=" not in spec:
-                raise PipelineError("--mock-output 형식: node={\"key\": \"value\"}")
+                raise PipelineError("--mock-output format: node={\"key\": \"value\"}")
             nid, payload = spec.split("=", 1)
             self.mock_outputs[nid.strip()] = json.loads(payload)
         self.run_id = args.resume or (
@@ -961,7 +961,7 @@ class Runner:
         if args.resume:
             sf = self.run_dir / "state.json"
             if not sf.is_file():
-                raise PipelineError("재개할 상태 파일이 없다: %s" % sf)
+                raise PipelineError("no state file to resume: %s" % sf)
             self.prev_nodes = json.loads(sf.read_text()).get("nodes", {})
         (self.run_dir / "prompts").mkdir(parents=True, exist_ok=True)
         (self.run_dir / "outputs").mkdir(parents=True, exist_ok=True)
@@ -1368,7 +1368,7 @@ class Runner:
     def _build_prompt(self, nd, it):
         path = self.pipe.resolve_prompt(nd["prompt"])
         if path is None:
-            raise PipelineError("프롬프트 파일 없음: %s" % nd["prompt"])
+            raise PipelineError("prompt file not found: %s" % nd["prompt"])
         content = self._substitute(path.read_text(), it, nd["id"])
 
         parts = [content]
@@ -1523,50 +1523,50 @@ def dry_run(pipe):
 # CLI
 # ---------------------------------------------------------------------------
 def main(argv=None):
-    ap = argparse.ArgumentParser(description="yml + 프롬프트 기반 에이전트 그래프 러너")
-    ap.add_argument("pipeline", help="pipeline.yml 경로")
-    ap.add_argument("--validate", action="store_true", help="검증만 수행")
-    ap.add_argument("--dry-run", action="store_true", help="실행 계획 출력")
-    ap.add_argument("--mermaid", action="store_true", help="mermaid 다이어그램 출력")
-    ap.add_argument("--mock", action="store_true", help="claude 호출 없는 모의 실행")
+    ap = argparse.ArgumentParser(description="YAML + prompt driven agent graph runner")
+    ap.add_argument("pipeline", help="path to pipeline.yml")
+    ap.add_argument("--validate", action="store_true", help="validate only")
+    ap.add_argument("--dry-run", action="store_true", help="print the execution plan")
+    ap.add_argument("--mermaid", action="store_true", help="print a mermaid diagram")
+    ap.add_argument("--mock", action="store_true", help="simulated run without claude calls")
     ap.add_argument(
         "--mock-status",
         action="append",
         metavar="NODE=S1,S2",
-        help="mock 상태 시퀀스 (반복 시 마지막 값 유지). 예: review=FAILED,SUCCEEDED",
+        help="scripted mock statuses per iteration (last value repeats), e.g. review=FAILED,SUCCEEDED",
     )
     ap.add_argument(
         "--mock-output",
         action="append",
         metavar="NODE=JSON",
-        help='mock GRAPH_OUTPUT 주입. 예: prepare={"route": "light"}',
+        help='scripted mock GRAPH_OUTPUT, e.g. prepare={"route": "light"}',
     )
-    ap.add_argument("--resume", metavar="RUN_ID", help="이전 실행 재개")
+    ap.add_argument("--resume", metavar="RUN_ID", help="resume a previous run")
     ap.add_argument(
         "--var",
         action="append",
         metavar="KEY=VALUE",
         default=[],
-        help="프롬프트 변수 {{vars.KEY}} 주입 (yml vars 를 덮어씀)",
+        help="inject prompt variables {{vars.KEY}} (overrides yml vars)",
     )
     args = ap.parse_args(argv)
     args.var = dict(v.split("=", 1) for v in args.var)
 
     yml = Path(args.pipeline)
     if not yml.is_file():
-        print("pipeline 파일이 없다: %s" % yml, file=sys.stderr)
+        print("pipeline file not found: %s" % yml, file=sys.stderr)
         return 2
     try:
         pipe = Pipeline(load_yaml(yml.read_text()), yml)
     except (YamlError, PipelineError, ValueError) as ex:
-        print("파이프라인 로드 실패: %s" % ex, file=sys.stderr)
+        print("failed to load pipeline: %s" % ex, file=sys.stderr)
         return 2
 
     errors, warnings = pipe.validate()
     for w in warnings:
-        print("경고: %s" % w, file=sys.stderr)
+        print("warning: %s" % w, file=sys.stderr)
     if errors:
-        print("검증 실패 (%d건):" % len(errors), file=sys.stderr)
+        print("validation failed (%d):" % len(errors), file=sys.stderr)
         for e in errors:
             print("  - %s" % e, file=sys.stderr)
         return 2

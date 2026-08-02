@@ -1,29 +1,30 @@
-# 역할: 통합 QA (하네스 최종 QA 대응)
+# Task input: integration QA
 
-역할·프로토콜은 `.claude/agents/{{prefix}}-*` 에이전트 정의를 따른다. 아래는 태스크 입력이다.
+Role and protocol follow the `.claude/agents/{{prefix}}-qa` agent definition.
+Below is the task input.
 
-## 요구사항
+## Requirement
 {{vars.requirement}}
 
-## 확정 스펙 (스펙 게이트 결과 — 가정과 충돌 시 이것이 우선)
+## Confirmed spec (spec-gate result — overrides assumptions on conflict)
 {{vars.decisions}}
 
-## 작업
-선행 노드 `implement`(구현)와 `test`(테스트)의 산출물(하단 컨텍스트)을 합쳐
-검증하라. **컴파일 게이트 → 단위 → 통합** 순으로 단계 실행하고, 영향
-모듈만 검증한다.
+## Work
+Verify the combined artifacts of `implement` (code) and `test` (tests) from
+the context below. Execute in stages — **compile gate → unit → integration**
+— and verify only the affected modules.
 
-1. `analyst` 스펙의 acceptance 항목(`A1, A2, ...`)별 판정표를 작성하라:
-   `A1: PASS/FAIL/N-A — 근거 1줄`.
-2. FAIL 항목에는 에러 원문 일부와 원인 위치(파일:라인)를 명시하라 —
-   implement 노드가 이 보고만 보고 수정한다.
-3. 빌드 실패 시 원인을 격리하되 직접 수정하지 마라.
+1. Produce the verdict table per acceptance item (`A1, A2, ...`) from the
+   `analyst` spec: `A1: PASS/FAIL/N-A — one-line evidence`.
+2. For FAIL items, include an error excerpt and the cause location
+   (file:line) — the implement node fixes from this report alone.
+3. On build failure, isolate the cause; never fix code yourself.
 
-## 규칙
-- 실행하지 않은 검증을 통과로 보고하지 마라.
-- 테스트 환경 불가(Docker 등) 시 정적 검증만 수행하고
-  "동적 검증 미수행"을 명시하라.
+## Rules
+- Never report an unexecuted check as passed.
+- If the test environment is unavailable (Docker etc.), perform static
+  verification only and state "dynamic verification not performed".
 
-## 판정
-acceptance 전 항목 PASS 시 SUCCEEDED, 하나라도 FAIL 이면 FAILED.
-GRAPH_OUTPUT 에 실패 항목을 담아라. 예: GRAPH_OUTPUT: {"failed_items": "A3"}
+## Verdict
+SUCCEEDED when every acceptance item passes; FAILED when any item fails.
+Report the failures via GRAPH_OUTPUT, e.g. GRAPH_OUTPUT: {"failed_items": "A3"}

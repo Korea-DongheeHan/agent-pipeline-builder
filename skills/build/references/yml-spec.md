@@ -1,219 +1,241 @@
-# pipeline.yml 스펙
+# pipeline.yml specification
 
-그래프 파이프라인 정의 파일의 전체 스키마. 러너는 `scripts/run_graph.py`.
+Full schema of the graph pipeline definition file. The runner is
+`scripts/run_graph.py`.
 
-## 최상위
+## Top level
 
 ```yaml
-name: my-pipeline        # 파이프라인 이름 (생략 시 파일명)
-kind: development        # development | workflow — 스캐폴딩 시 프롬프트 성격 결정 (문서화 용도)
-vars:                    # 프롬프트 변수. {{vars.KEY}} 로 치환. --var KEY=VALUE 가 덮어쓴다
+name: my-pipeline        # pipeline name (defaults to the file name)
+kind: development        # development | workflow — sets the prompt style at scaffold time (documentation only)
+vars:                    # prompt variables, substituted as {{vars.KEY}}; --var KEY=VALUE overrides
   requirement: "..."
-settings: { ... }        # 아래 참조
-nodes: [ ... ]           # 노드(에이전트) 정의
-workflow: [ ... ]        # 권장 — 중첩 블록 DSL (아래 참조)
-edges: [ ... ]           # 저수준 — 엣지 직접 정의 (workflow 와 병용 가능)
+settings: { ... }        # see below
+nodes: [ ... ]           # node (agent) definitions
+workflow: [ ... ]        # recommended — nested block DSL (see below)
+edges: [ ... ]           # low level — direct edge definitions (can be mixed with workflow)
 ```
 
-## workflow — 중첩 블록 DSL (권장)
+## workflow — nested block DSL (recommended)
 
-워크플로우를 **위에서 아래로 읽히는 중첩 구조**로 쓴다. 러너가 내부적으로
-엣지로 컴파일한다. START/END 는 자동 연결된다 (첫 스텝 앞 START, 마지막
-스텝의 SUCCEEDED 뒤 END).
+Write the flow as a **nested structure that reads top to bottom**. The runner
+compiles it to edges internally. START/END are wired automatically (START
+before the first step, END after the last step's SUCCEEDED).
 
 ```yaml
 workflow:
-  - analyst                            # 문자열 = 노드 순차 실행 (선행 SUCCEEDED 시)
-  - parallel: [implement, test]        # Fan-Out. 항목 = 노드 | 시퀀스 | 중첩 블록
-  - qa:                                # Fan-In — 병렬 갈래가 모두 끝나야 실행
-      if: FAILED                       # 노드 부착 라우팅: 이 노드의 상태·출력 체크 후 점프
-      goto: implement                  # 이미 나온 노드로 = 피드백 루프 (자동 판정)
-      max: 2                           # 루프 상한 (뒤로 goto 기본 3)
-      exhausted: escalate              # 소진 시: FAIL(기본, 즉시 실패) | 노드 id
+  - analyst                            # string = run the node in sequence (when upstream SUCCEEDED)
+  - parallel: [implement, test]        # fan-out; items = node | sequence | nested block
+  - qa:                                # fan-in — waits for every parallel branch
+      if: FAILED                       # node-attached routing: check THIS node's status/output, then jump
+      goto: implement                  # goto to an already-placed node = feedback loop (detected automatically)
+      max: 2                           # loop cap (backward goto defaults to 3)
+      exhausted: escalate              # on exhaustion: FAIL (default, fail immediately) | a node id
   - review
-  - branch:                            # 다중 케이스 분기 (단일 선행 노드 뒤에만)
-      on: route                        # GRAPH_OUTPUT 키. 생략 시 케이스 키가
-      cases:                           # SUCCEEDED|FAILED|ALWAYS (STATUS 분기)
-        heavy: process-heavy           # 케이스 값 = 노드 | 시퀀스 (END/FAIL 터미널 허용)
+  - branch:                            # multi-case branch (only right after a single node)
+      on: route                        # a GRAPH_OUTPUT key; omit it and case keys become
+      cases:                           # SUCCEEDED|FAILED|ALWAYS (STATUS branching)
+        heavy: process-heavy           # case value = node | sequence (END/FAIL terminals allowed)
         light: [process-light]
-  - finalize                           # 분기 합류점 — 자동으로 join: any
+  - finalize                           # branch merge point — automatically join: any
 ```
 
-블록 시맨틱:
+Block semantics:
 
-- **순차**: 리스트 순서대로. 각 연결의 기본 조건은 선행 SUCCEEDED.
-- **parallel**: 갈래를 동시에 실행. 다음 스텝은 모든 갈래 완료를 기다린다
-  (join: all). 갈래 안에 시퀀스·중첩 블록을 넣을 수 있다.
-- **if/goto** (권장 — 상태 체크 분기·루프): 노드에 라우팅 규칙을 부착한다.
-  상태(`if: FAILED`)나 출력(`if: route == heavy`)을 체크해 점프한다.
+- **Sequence**: list order. Each connection's default condition is upstream
+  SUCCEEDED.
+- **parallel**: run branches concurrently. The next step waits for all
+  branches (join: all). Branches may contain sequences and nested blocks.
+- **if/goto** (recommended for status checks and loops): attach routing rules
+  to a node. Check its status (`if: FAILED`) or output
+  (`if: route == heavy`) and jump.
   ```yaml
-  - qa:                          # 규칙 여러 개는 리스트로:
+  - qa:                          # multiple rules as a list:
       if: FAILED                 #   - qa:
       goto: implement            #       - {if: FAILED, goto: implement, max: 2}
       max: 2                     #       - {if: risk == high, goto: security}
   ```
-  - **뒤로 goto** (이미 나온 노드) = 피드백 루프. `max`(기본 3) 초과 시
-    `exhausted` 경로로 위임. goto 에 리스트를 주면 여러 노드 재작업.
-  - **앞·측면·END·FAIL 로 goto** = 조건 분기. 대상 노드는 자동 `join: any`.
-  - `if` 를 생략하면 무조건 점프이고 순차 흐름은 거기서 끊긴다.
-  - OUTPUT 조건(`==`/`!=`)이면 다음 스텝의 기본 엣지에 부정 조건이 자동
-    주입돼 배타가 보장된다 (`in` 은 자동 배타 미지원 — branch 를 써라).
-- **loop**: 루프 범위를 블록으로 명시하고 싶을 때. `body` 안에서 **redo 스텝
-  이후의 노드가 FAILED** 를 보고하면 redo 노드로 피드백한다. redo 스텝
-  이전(포함) 노드의 FAILED 는 파이프라인 실패. `max` 초과 시 `exhausted` 위임.
+  - **Backward goto** (to an already-placed node) = feedback loop. Beyond
+    `max` (default 3) it delegates to the `exhausted` path. A list target
+    reworks several nodes.
+  - **Forward/sideways/END/FAIL goto** = conditional branch. Target nodes get
+    `join: any` automatically.
+  - Omitting `if` makes it an unconditional jump and cuts the sequential flow.
+  - With an OUTPUT condition (`==`/`!=`), the negated condition is injected
+    into the next step's default edge so the two are mutually exclusive
+    (`in` has no auto-exclusion — use branch instead).
+  - `goto: [report-node, FAIL]` means "run the report node, then fail the
+    pipeline" — the runner fails the run automatically after that node
+    finishes (fail-after semantics).
+- **loop**: for an explicitly scoped loop. Inside `body`, any node **after
+  the redo step** reporting FAILED feeds back to the redo node. A FAILED at
+  or before the redo step fails the pipeline. Beyond `max` it delegates to
+  `exhausted`.
   ```yaml
   - loop:
       max: 2
       exhausted: escalate
-      redo: implement                  # 생략 시 body 첫 노드
+      redo: implement                  # defaults to the first body node
       body:
         - parallel: [implement, test]
         - qa
         - review
   ```
-- **branch**: 선행 노드의 GRAPH_OUTPUT(`on` 키) 또는 STATUS 로 케이스를
-  고른다. 매칭되는 케이스가 없으면 데드락으로 파이프라인 실패 — 케이스를
-  전수 정의하라. 합류점(다음 스텝)은 자동으로 `join: any` 가 된다
-  (노드에 join 을 명시했으면 그 값을 존중).
-- **합류점 주의**: 여러 경로 중 일부만 도착하는 노드에 수동 `edges:` 로
-  들어오는 엣지를 섞으면 `join: any` 를 노드에 명시해야 한다.
+- **branch**: pick a case from the upstream node's GRAPH_OUTPUT (`on` key) or
+  STATUS. An unmatched case deadlocks the pipeline — define every case. The
+  merge point (next step) becomes `join: any` automatically (an explicit
+  `join` on the node is respected).
+- **Merge-point caveat**: if manual `edges:` also feed a node that only some
+  paths reach, set `join: any` on the node explicitly.
 
 ## settings
 
-| 키 | 기본값 | 설명 |
+| Key | Default | Description |
 |---|---|---|
-| `lang` | `en` | 실행 로그·프롬프트 주입 문구 언어 (`en` \| `ko`). 상태 마커·종료 코드는 언어 무관 |
-| `mode` | `runner` | 기본 실행 모드 선언. `runner` = run_graph.py 실행(결정적·resume), `session` = Claude 가 Agent 툴로 해석 실행(관찰·개입). 산출물 SKILL.md 가 이 값을 기본으로 따르고, 사용자가 실행 시 오버라이드 가능 |
-| `parallelism` | 4 | 동시에 실행할 최대 노드 수 |
-| `state_dir` | `.graph-runs` | 실행 상태·산출물 저장 위치 |
-| `node_timeout` | 3600 | 노드(에이전트) 1회 실행 제한(초) |
-| `max_total_steps` | 100 | 총 노드 활성화 횟수 상한 (루프 폭주 방지) |
-| `context_max_chars` | 8000 | 선행 노드 출력을 프롬프트에 주입할 때 노드당 최대 길이 |
-| `claude_args` | `[]` | 모든 노드의 claude CLI 에 붙일 공통 인자. 예: `["--permission-mode", "acceptEdits"]` |
-| `model` | (없음) | 기본 모델. 노드별 `model` 이 우선 |
-| `claude_bin` | `claude` | claude 실행 파일 경로 (env `CLAUDE_BIN` 도 지원) |
+| `lang` | `en` | Language of runner logs and injected prompt protocol (`en` \| `ko`). Status markers and exit codes are language-neutral |
+| `mode` | `runner` | Declared default execution mode. `runner` = run_graph.py (deterministic, resume); `session` = Claude interprets the same YAML with the Agent tool (observable). The output SKILL.md follows this value; users can override per run |
+| `parallelism` | 4 | Maximum concurrently running nodes |
+| `state_dir` | `.graph-runs` | Where run state and artifacts are stored |
+| `node_timeout` | 3600 | Per-execution limit for a node (seconds) |
+| `max_total_steps` | 100 | Cap on total node activations (runaway guard) |
+| `context_max_chars` | 8000 | Per-node cap when injecting upstream output into a prompt |
+| `claude_args` | `[]` | Extra claude CLI args for every node, e.g. `["--permission-mode", "acceptEdits"]` |
+| `model` | (none) | Default model; per-node `model` wins |
+| `claude_bin` | `claude` | Path to the claude binary (env `CLAUDE_BIN` also works) |
 
 ## nodes
 
 ```yaml
 nodes:
   - id: spec-gate
-    gate: true                 # 게이트 노드: 도달 시 파이프라인 일시정지(PAUSED, exit 3).
-                               # 오케스트레이터가 사람 확인(예: AskUserQuestion 스펙 확정)
-                               # 후 --resume 으로 통과시킨다 (--var 로 확정 값 주입 가능).
-                               # prompt 불필요, 에이전트 실행 없음
+    gate: true                 # gate node: pauses the pipeline on arrival (PAUSED, exit 3).
+                               # The orchestrator gets human confirmation (e.g. spec
+                               # via AskUserQuestion), then --resume passes it
+                               # (inject confirmed values with --var). No prompt, no agent run
   - id: build-check
-    type: command              # agent(기본) | command. command 는 에이전트 세션 없이
-    run: ./gradlew build       # 셸 명령을 실행한다 — exit 0 = SUCCEEDED, 그 외 FAILED.
-                               # stdout 의 GRAPH_OUTPUT 줄은 분기 값으로 파싱되고
-                               # run 문자열에 {{vars.*}} 치환이 적용된다.
-                               # 신뢰 경계: run 은 러너가 그대로 실행한다 —
-                               # pipeline.yml 은 코드와 동일한 리뷰 대상이다
-    timeout: 900               # 선택. 노드별 타임아웃(초) — 생략 시 settings.node_timeout
-  - id: review                 # 필수, 고유. START/END/FAIL 은 예약어
-    prompt: prompts/review.md  # 필수(게이트·command 제외). 스크립트 실행 위치(cwd) 기준 상대경로.
-                               # 없으면 pipeline.yml 위치 기준으로 폴백
-    model: opus                # 선택. 노드별 모델
-    agent: my-reviewer         # 선택. claude --agent — 실행 저장소의
-                               # .claude/agents/<이름> 정의(모델·도구·시스템 프롬프트)를 사용
-    join: all                  # all(기본) | any — Fan-In 정책 (workflow DSL 이 자동 설정)
-    retry: 1                   # 선택. FAILED 시 즉시 재시도 횟수 (기본 0)
-    allowed_tools: "Read Bash" # 선택. --allowedTools 로 전달
-    context: [architect]       # 선택. 직접 선행이 아니어도 출력을 컨텍스트로 주입할 노드
-    append_prompt: |           # 선택. 프롬프트 파일 뒤에 덧붙일 인라인 지시
-      추가 지시...
+    type: command              # agent (default) | command. A command node runs a shell
+    run: ./gradlew build       # command with no agent session — exit 0 = SUCCEEDED,
+                               # anything else FAILED. A GRAPH_OUTPUT line on stdout is
+                               # parsed for routing, and {{vars.*}} substitution applies
+                               # to run. Trust boundary: run executes as-is —
+                               # review pipeline.yml like code
+    timeout: 900               # optional per-node timeout (seconds); defaults to settings.node_timeout
+  - id: review                 # required, unique. START/END/FAIL are reserved
+    prompt: prompts/review.md  # required (except gate/command). Relative to the cwd where
+                               # the script runs; falls back to the pipeline.yml directory
+    model: opus                # optional per-node model
+    agent: my-reviewer         # optional; claude --agent — uses the repo's
+                               # .claude/agents/<name> definition (model, tools, system prompt)
+    join: all                  # all (default) | any — fan-in policy (the workflow DSL sets this automatically)
+    retry: 1                   # optional immediate retries on FAILED (default 0)
+    allowed_tools: "Read Bash" # optional; passed as --allowedTools
+    context: [architect]       # optional; inject these nodes' outputs even if not direct upstream
+    append_prompt: |           # optional inline instructions appended after the prompt file
+      extra instructions...
 ```
 
-- `join: all` — 모든 비-루프 인바운드 엣지가 도착해야 실행 (Fan-In 동기화)
-- `join: any` — 하나라도 도착하면 실행 (조건 분기 합류점)
-- **sticky 도착**: 한 번 충족된 선행 조건은 유지된다. 피드백 루프에서 실패한
-  경로만 재실행돼도 Fan-In 노드는 (이전 도착 + 새 도착)으로 재트리거된다.
-  단, 업스트림이 아직 실행/대기 중이면 완료까지 기다렸다가 1회만 재실행한다.
+- `join: all` — every non-loop inbound edge must arrive before the node runs
+  (fan-in synchronization).
+- `join: any` — the first arrival runs it (branch merge points).
+- **Sticky arrivals**: a satisfied precondition stays satisfied. In a feedback
+  loop where only the failed path re-runs, a fan-in node re-triggers with
+  (previous arrivals + the new one) — but if an upstream node is still
+  running or pending, it waits and re-runs exactly once.
 
-## edges — 저수준 정의
+## edges — low-level definitions
 
-workflow DSL 로 표현하기 어려운 특수 위상이 필요할 때 쓴다. workflow 와
-병용하면 컴파일된 엣지에 더해진다.
+Use these for topologies the workflow DSL cannot express. When mixed with
+workflow, they are appended to the compiled edges.
 
 ```yaml
 edges:
-  - from: review               # 노드 id | START | 리스트 (리스트 = 엣지 여러 개로 확장)
-    to: [impl-a, impl-b]       # 노드 id | END | FAIL | 리스트 (리스트 = Fan-Out)
-    when: FAILED               # 조건. 생략 시 STATUS==SUCCEEDED
-    loop:                      # 이 엣지를 피드백(순환) 엣지로 선언
+  - from: review               # node id | START | list (a list expands to multiple edges)
+    to: [impl-a, impl-b]       # node id | END | FAIL | list (a list = fan-out)
+    when: FAILED               # condition; omitted = STATUS==SUCCEEDED
+    loop:                      # declares this edge as a feedback (cyclic) edge
       max: 3
-      on_exhausted: escalate   # FAIL(기본) | 위임할 노드 id
+      on_exhausted: escalate   # FAIL (default) | a node id to delegate to
 ```
 
-### when 조건
+### when conditions
 
-리스트로 쓰면 AND. 문자열 축약형과 표현식을 지원한다:
+A list means AND. String shorthands and expressions are supported:
 
 ```yaml
-when: FAILED                   # STATUS 축약형: SUCCEEDED | FAILED | ALWAYS
-when: route == heavy           # GRAPH_OUTPUT 표현식: == | != | in [a, b]
+when: FAILED                   # STATUS shorthand: SUCCEEDED | FAILED | ALWAYS
+when: route == heavy           # GRAPH_OUTPUT expression: == | != | in [a, b]
 when:
-  - type: STATUS               # 명시형
+  - type: STATUS               # explicit form
     status: SUCCEEDED
   - type: OUTPUT
     key: route
     equals: heavy              # equals | not_equals | in: [a, b]
 ```
 
-### 그래프 규칙
+OUTPUT comparisons are raw string comparisons — expression values are never
+coerced (`yes` stays the string "yes").
 
-- `loop` 없는 엣지만으로는 사이클이 없어야 한다(DAG). 순환(피드백)은 반드시
-  `loop` 를 붙인 엣지로만 만든다 — `--validate` 가 위반을 잡는다.
-- `to: END` 도달 = 파이프라인 성공. 이후 신규 활성화는 멈추고 실행 중 노드만 마무리.
-- `to: FAIL` 도달 = 파이프라인을 의도적으로 실패로 종결 (에스컬레이션 보고 후 등).
-- 노드가 FAILED 인데 매칭되는 엣지가 없으면 파이프라인 즉시 FAILED.
-- 실행할 노드가 없는데 END 미도달이면 데드락으로 FAILED + 대기 원인 출력.
+### Graph rules
 
-## 에이전트 상태 보고 프로토콜
+- The graph without `loop` edges must be a DAG. Cycles (feedback) are allowed
+  only through edges carrying `loop` — `--validate` enforces this.
+- Reaching `to: END` = pipeline success. New activations stop; running nodes
+  finish.
+- Reaching `to: FAIL` = the pipeline ends as an intentional failure (e.g.
+  after an escalation report).
+- A node that reports FAILED with no matching edge fails the pipeline
+  immediately.
+- No runnable node while END is unreached = deadlock; the run fails with a
+  diagnosis of what was waiting.
 
-러너가 모든 프롬프트 끝에 자동 주입한다 (프롬프트 파일에 다시 쓸 필요 없음):
+## Agent status protocol
+
+The runner injects this at the end of every prompt automatically (do not
+repeat it in prompt files):
 
 ```
-GRAPH_OUTPUT: {"key": "value"}   # 선택 — branch/OUTPUT 조건의 입력
-GRAPH_STATUS: SUCCEEDED          # 필수 — SUCCEEDED | FAILED
+GRAPH_OUTPUT: {"key": "value"}   # optional — input for branch/OUTPUT conditions
+GRAPH_STATUS: SUCCEEDED          # required — SUCCEEDED | FAILED
 ```
 
-마커가 없고 exit 0 이면 SUCCEEDED 로 간주(경고 로그). 프롬프트 파일에는
-**판정 기준**(무엇이 성공/실패인지)과 **GRAPH_OUTPUT 키 규약**만 쓴다.
+No marker with exit 0 counts as SUCCEEDED (with a warning). Prompt files
+carry only the **pass/fail criteria** and the **GRAPH_OUTPUT key contract**.
 
-## 프롬프트 변수 치환
+## Prompt variable substitution
 
 `{{vars.KEY}}`, `{{run.id}}`, `{{node.id}}`, `{{node.iteration}}`
 
-## 컨텍스트 주입
+## Context injection
 
-노드 실행 시 직접 선행 노드(+ `context` 로 지정한 노드)의 최신 출력이
-"선행 노드 출력" 섹션으로 프롬프트에 자동 주입된다. `context_max_chars`
-초과분은 잘리고 전체 출력 파일 경로가 함께 제공된다.
+When a node runs, the latest outputs of its direct upstream nodes (plus any
+nodes listed in `context`) are injected as an "upstream outputs" section.
+Content beyond `context_max_chars` is truncated, with the full output file
+path provided alongside.
 
 ## CLI
 
 ```
-python3 scripts/run_graph.py pipeline.yml            # 실행
-  --validate                                         # 검증만 (스키마·도달성·사이클)
-  --dry-run                                          # 병렬 wave 실행 계획 출력
-  --mermaid                                          # mermaid 다이어그램 출력
-  --mock                                             # claude 호출 없는 모의 실행
-  --mock-status NODE=FAILED,SUCCEEDED                # mock 상태 시퀀스 (iter 별, 마지막 값 유지)
-  --mock-output 'NODE={"route": "light"}'            # mock GRAPH_OUTPUT 주입
-  --resume RUN_ID                                    # 재개: SUCCEEDED 노드 캐시 재사용
-  --var KEY=VALUE                                    # 프롬프트 변수 주입
+python3 scripts/run_graph.py pipeline.yml            # run
+  --validate                                         # checks only (schema, reachability, cycles)
+  --dry-run                                          # parallel-wave execution plan
+  --mermaid                                          # mermaid diagram
+  --mock                                             # simulated run without claude calls
+  --mock-status NODE=FAILED,SUCCEEDED                # scripted statuses per iteration (last value repeats)
+  --mock-output 'NODE={"route": "light"}'            # scripted GRAPH_OUTPUT
+  --resume RUN_ID                                    # resume; SUCCEEDED nodes served from cache
+  --var KEY=VALUE                                    # inject prompt variables
 ```
 
-종료 코드: 성공 0, 실패 1, 로드/검증 실패 2, **게이트 일시정지 3** (PAUSED —
-선행 산출물 검토·확정 후 `--resume`, 필요 시 `--var` 로 확정 값 주입).
+Exit codes: 0 success, 1 failure, 2 load/validation error, **3 gate pause**
+(PAUSED — review upstream artifacts, confirm, then `--resume`, optionally
+injecting confirmed values with `--var`).
 
-## 실행 산출물
+## Run artifacts
 
 ```
 <state_dir>/<run-id>/
-  state.json                  # 노드 상태·outputs·루프 카운터 (resume 입력)
-  run.log                     # 실행 로그 자동 기록 (콘솔과 동일 — 리다이렉트 불필요)
-  prompts/<node>.iterN.prompt.md   # 실제 주입된 프롬프트 (디버깅)
-  outputs/<node>.iterN.md          # 노드 출력 전문
+  state.json                  # node statuses, outputs, loop counters (resume input)
+  run.log                     # automatic run log (same as console — no redirection needed)
+  prompts/<node>.iterN.prompt.md   # the exact injected prompt (debugging)
+  outputs/<node>.iterN.md          # full node output
 ```

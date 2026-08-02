@@ -1,11 +1,11 @@
-# 팀 아키텍처 패턴 — 그래프 DSL 대응표
+# Team architecture patterns — mapped to the graph DSL
 
-요구사항에서 팀 구조를 고를 때 이 패턴에서 출발한다. 모든 패턴은
-pipeline.yml 의 workflow DSL 로 표현되며 조합 가능하다.
+Start from these patterns when choosing a team structure for a request. Every
+pattern is expressed in the pipeline.yml workflow DSL and they compose freely.
 
-## 1. Pipeline (순차 체인)
+## 1. Pipeline (sequential chain)
 
-작업이 선후 관계로만 이어질 때. 배치 잡 체인, 마이그레이션 단계.
+Work connected only by order: batch job chains, migration steps.
 
 ```yaml
 workflow:
@@ -14,21 +14,23 @@ workflow:
   - load
 ```
 
-## 2. Fan-Out / Fan-In (병렬 분업)
+## 2. Fan-Out / Fan-In (parallel division)
 
-독립 작업을 동시에 진행하고 합류점에서 동기화. 다갈래 구현, 다차원 검사.
+Independent work runs concurrently and synchronizes at a merge point:
+multi-branch implementation, multi-dimension inspection.
 
 ```yaml
 workflow:
   - plan
   - parallel: [impl-api, impl-batch, impl-admin]
-  - integrate            # join: all (기본) — 전 갈래 완료 대기
+  - integrate            # join: all (default) — waits for every branch
 ```
 
-## 3. Producer–Reviewer (생성 → 검수 + 수렴 루프)
+## 3. Producer–Reviewer (produce → judge + convergence loop)
 
-산출물을 만들고 독립 검수자가 판정, 실패 시 재작업. **개발 오케스트레이션의
-기본 골격** — templates/pipeline-dev 가 이 패턴(+Fan-Out)이다.
+Produce, let an independent judge verdict, rework on failure. **The backbone
+of development orchestration** — templates/pipeline-dev is this pattern plus
+fan-out.
 
 ```yaml
 workflow:
@@ -37,13 +39,13 @@ workflow:
       if: FAILED
       goto: implement
       max: 2
-      exhausted: escalate            # 반복 실패 → 보고 노드 실행 후 자동 실패 종결
+      exhausted: escalate            # repeated failure → run the report node, then auto-fail
 ```
 
-## 4. Expert Pool (조건 라우팅)
+## 4. Expert Pool (conditional routing)
 
-입력 특성에 따라 다른 전문가에게 위임. 분류 노드가 GRAPH_OUTPUT 으로
-라우팅 키를 보고한다.
+Delegate by input kind. A triage node reports the routing key via
+GRAPH_OUTPUT.
 
 ```yaml
 workflow:
@@ -54,91 +56,94 @@ workflow:
         bug: [reproduce, fix]
         feature: [design, implement]
         docs: update-docs
-  - verify                          # 합류점 — 자동 join: any
+  - verify                          # merge point — automatically join: any
 ```
 
-## 5. Gate (품질 게이트 체인)
+## 5. Gate (quality gate chain)
 
-단계마다 통과/탈락을 판정하고 탈락 시 즉시 실패 경로로. 검증 위주 파이프라인.
-판정이 필요 없는 결정적 단계(빌드·스캔)는 `type: command` 노드로 두면
-에이전트 세션 비용 없이 exit code 로 판정된다.
+Each stage passes or fails, and a failure exits immediately.
+Verification-heavy pipelines. Make deterministic stages (build, scan)
+`type: command` nodes — they verdict by exit code with no agent-session cost.
 
 ```yaml
 workflow:
   - build-check:
       if: FAILED
-      goto: [report-failure, FAIL]  # 앞으로 goto = 분기 (report 후 실패 종결)
+      goto: [report-failure, FAIL]  # run the report node, then fail the run
   - security-scan:
       if: FAILED
       goto: [report-failure, FAIL]
   - deploy-ready
 ```
 
-## 6. Fan-out & Synthesize (분할 후 종합)
+## 6. Fan-out & Synthesize (split, then merge)
 
-작업을 컨텍스트가 격리된 갈래로 쪼개 병렬 수행하고, 배리어에서 병합한다.
-갈래가 서로 간섭하면 안 되는 감사·조사류에 적합하다.
+Split the work into context-isolated branches, run them in parallel, and
+merge at a barrier. Fits audits and investigations where branches must not
+contaminate each other.
 
 ```yaml
 workflow:
-  - plan-slices                                     # 갈래별 브리프 파일 작성
-  - parallel: [audit-api, audit-batch, audit-web]   # 각자 독립 세션
-  - synthesize                                      # join: all 배리어 — 전 갈래 병합
+  - plan-slices                                     # writes one brief per branch
+  - parallel: [audit-api, audit-batch, audit-web]   # each in its own session
+  - synthesize                                      # join: all barrier — merges all branches
 ```
 
-## 7. Adversarial Verification (적대적 검증)
+## 7. Adversarial Verification
 
-생성 노드마다 독립 반증 노드를 짝지어, 검증을 통과한 결과만 종합한다.
-자기 선호 편향을 세션 격리로 구조적으로 차단한다.
+Pair every producer with an independent refuter and synthesize only what
+survives. Session isolation structurally blocks self-preference bias.
 
 ```yaml
 workflow:
   - parallel:
-      - [draft-a, refute-a]     # 반증 노드는 GRAPH_OUTPUT {"refuted": "yes|no"} 보고
+      - [draft-a, refute-a]     # refuters report GRAPH_OUTPUT {"refuted": "yes|no"}
       - [draft-b, refute-b]
-  - synthesize                  # 이 노드에 context: [draft-a, draft-b] 를 지정해
-                                # 원문과 반증 판정을 함께 받는다
+  - synthesize                  # set context: [draft-a, draft-b] on this node so it
+                                # receives the originals alongside the verdicts
 ```
 
-같은 골격에서 반증 노드를 채점 노드로 바꾸면 **생성 후 필터링**
-(Generate-and-Filter)이 된다: `parallel: [ideate-a, ideate-b, ideate-c]` 뒤에
-filter 노드 하나.
+Swap the refuters for scorers and the same skeleton becomes
+**Generate-and-Filter**: `parallel: [ideate-a, ideate-b, ideate-c]` followed
+by one filter node.
 
-## 8. Loop until Done (완료까지 반복)
+## 8. Loop until Done
 
-작업량을 미리 모를 때, 노드가 잔여 여부를 보고하는 동안 자기 루프를 돈다.
-`max` 는 무한 반복이 아니라 비용 상한이다 — 초과 시 exhausted 경로로 위임된다.
+When the amount of work is unknown, self-loop while the node reports work
+remaining. `max` is a cost ceiling, not an iteration target — beyond it the
+run delegates to the exhausted path.
 
 ```yaml
 workflow:
-  - sweep:                      # 배치 1회 수행, GRAPH_OUTPUT {"remaining": "yes|no"}
+  - sweep:                      # one batch of work; GRAPH_OUTPUT {"remaining": "yes|no"}
       if: remaining == yes
-      goto: sweep               # 자기 루프
+      goto: sweep               # self-loop
       max: 20
-  - report                      # remaining 이 no 가 되면 진행
+  - report                      # proceeds once remaining is no
 ```
 
-## 미지원 패턴 (정직하게 알려라)
+## Unsupported patterns (say so honestly)
 
-- **동적 Fan-out / Supervisor**: 노드는 yml 에 정적 선언된다. 런타임에 작업
-  개수에 따라 노드를 늘릴 수 없다 — 갈래 폭을 미리 고정하거나 세션 모드에서
-  Claude 가 직접 Agent 를 늘리는 방식으로 우회한다.
-- **쌍별 토너먼트**: 승자 진출식 반복 대진은 동적 흐름이라 표현할 수 없다.
-  N개 병렬 시도 뒤 판정 노드 1개가 한 번에 비교하는 형태(7과 동일 골격)로
-  근사한다.
-- **무상한 루프**: 모든 루프에는 `max` 가 필수다 — 정지 조건이 영영 오지
-  않을 때 비용이 무한히 새는 것을 막는 설계다.
-- **실시간 팀 통신**: 노드 간 대화(SendMessage)는 없다. 결함은 피드백
-  엣지로 순환한다 — 결정적·재현 가능하지만 왕복이 느리다.
+- **Dynamic fan-out / Supervisor**: nodes are declared statically in the yml.
+  The agent count cannot grow at runtime — fix the branch width up front, or
+  work around it in session mode where Claude spawns agents directly.
+- **Pairwise tournament**: winner-advances brackets are dynamic flow.
+  Approximate with N parallel attempts judged at once by a single node (same
+  skeleton as 7).
+- **Unbounded loops**: every loop requires `max` — it prevents unbounded cost
+  when the stop condition never arrives.
+- **Real-time team chat**: nodes do not message each other. Defects circulate
+  through feedback edges — deterministic and reproducible, at the cost of
+  slower round trips.
 
-## 선택 기준
+## Selection guide
 
-| 요구 | 패턴 |
+| Request | Pattern |
 |---|---|
-| "기능 개발 파이프라인" | 3 + 2 (기본 템플릿 그대로) |
-| "배치·순차 작업 자동화" | 1 (+ 5 의 실패 분기) |
-| "요청 유형별로 다르게 처리 (분류 후 실행)" | 4 |
-| "머지 전 품질 검사 자동화" | 5 |
-| "대규모 감사·조사를 나눠서" | 6 |
-| "결과를 반증·채점으로 걸러서" | 7 |
-| "남은 작업이 없어질 때까지" | 8 |
+| "a feature development pipeline" | 3 + 2 (the default template as-is) |
+| "automate batch/sequential jobs" | 1 (+ the failure branch of 5) |
+| "handle request types differently (classify-and-act)" | 4 |
+| "automate pre-merge quality checks" | 5 |
+| "divide a large audit/investigation" | 6 |
+| "filter results through refutation/scoring" | 7 |
+| "repeat until no work remains" | 8 |
