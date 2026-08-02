@@ -1,7 +1,7 @@
 {
   "name": "graph-builder-marketplace",
   "metadata": {
-    "description": "graph-builder 플러그인 배포용 마켓플레이스"
+    "description": "Marketplace for the graph-builder plugin"
   },
   "owner": {
     "name": "landsnail"
@@ -10,7 +10,7 @@
     {
       "name": "graph-builder",
       "source": "./",
-      "description": "멀티 에이전트 그래프 파이프라인 빌더 — yml + 프롬프트로 팀/워크플로우를 구성하고 프로젝트에 독자 실행 스킬로 스캐폴딩"
+      "description": "Deterministic YAML-driven multi-agent dev orchestration: scaffold a pipeline skill and agent team into your repo (build), then evolve it in place (edit)."
     }
   ]
 }

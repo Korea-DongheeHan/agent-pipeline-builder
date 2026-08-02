@@ -1,7 +1,7 @@
 {
   "name": "graph-builder",
   "version": "0.3.0",
-  "description": "개발 오케스트레이션 구성 메타 플러그인. build 스킬이 프로젝트에 독자 실행 오케스트레이션(CLAUDE.md 트리거 + .claude/skills 파이프라인 스킬(yml+러너) + .claude/agents 에이전트)을 생성하고, edit 스킬이 yml·에이전트 구성 변경을 돕는다.",
+  "description": "Builds deterministic multi-agent development orchestrations for Claude Code. The build skill scaffolds a self-contained pipeline into your repo — a YAML graph, a stdlib-only runner, node prompts, a project agent team, and a CLAUDE.md trigger; the edit skill changes and diagnoses installed pipelines. The graph language covers parallel fan-out/fan-in, conditional routing, capped feedback loops, human gates with pause/resume, deterministic shell (command) nodes, mock verification, and localized logs (en/ko). Two execution modes: deterministic runner or observable session mode.",
   "author": {
     "name": "landsnail"
   },
