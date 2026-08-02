@@ -5,8 +5,8 @@ description: 개발 오케스트레이션 스킬 ({{project_name}}). 기능 개�
 
 # {{pipeline_name}} — 개발 오케스트레이션 스킬
 
-graph-builder 로 생성된 **독자 실행 오케스트레이션**이다. 이 디렉토리와
-`.claude/agents/{{prefix}}-*.md` 만으로 동작한다 (graph-builder 설치 불필요).
+agent-pipeline-builder 로 생성된 **독자 실행 오케스트레이션**이다. 이 디렉토리와
+`.claude/agents/{{prefix}}-*.md` 만으로 동작한다 (agent-pipeline-builder 설치 불필요).
 
 - 흐름(SSOT): `pipeline.yml` — 노드·병렬·분기·피드백 루프
 - 역할·전문성: `.claude/agents/{{prefix}}-*.md` (모델·도구·시스템 프롬프트)
@@ -90,13 +90,13 @@ graph-builder 로 생성된 **독자 실행 오케스트레이션**이다. 이 �
 | 너무 느리거나 비쌈 | 노드 병합, 에이전트 `model:` 경량화, 루프 `max` 축소 |
 | 질문이 부족/과다 (스펙 게이트) | `prompts/analyst.md` 확정 질문 규약 |
 
-변경은 `graph-builder:edit` 스킬(플러그인 설치 시)로 수행하고, 수동 변경 시에도
+변경은 `agent-pipeline-builder:edit` 스킬(플러그인 설치 시)로 수행하고, 수동 변경 시에도
 `CHANGELOG.md` 에 한 줄(날짜·요청·변경 파일)을 남긴다.
 
 ## 구성 변경
 
-- 흐름 변경: `pipeline.yml` (문법: yml 상단 주석 및 graph-builder 스펙)
+- 흐름 변경: `pipeline.yml` (문법: yml 상단 주석 및 agent-pipeline-builder 스펙)
 - 판정 기준·태스크 입력: `prompts/*.md` / 역할·모델: `.claude/agents/{{prefix}}-*.md`
 - 변경 후 필수: `--validate` → `--mock` 으로 그래프 로직 검증
-- graph-builder 플러그인이 설치돼 있으면 **`graph-builder:edit` 스킬**이
+- agent-pipeline-builder 플러그인이 설치돼 있으면 **`agent-pipeline-builder:edit` 스킬**이
   노드 추가·루프 조정·에이전트 변경을 안전하게 대신한다 ("파이프라인에 X 추가해줘")

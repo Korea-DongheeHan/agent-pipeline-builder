@@ -1,12 +1,12 @@
-# graph-builder
+# agent-pipeline-builder
 
 **한 문장의 설명에서 프로젝트 전용 멀티 에이전트 개발 오케스트레이션을 만들어 냅니다.**
 
 [English](README.md) · 한국어
 
-![graph-builder: pipeline.yml 이 결정적 멀티 에이전트 그래프로 컴파일되는 모습](docs/hero.svg)
+![agent-pipeline-builder: pipeline.yml 이 결정적 멀티 에이전트 그래프로 컴파일되는 모습](docs/hero.svg)
 
-graph-builder 는 YAML 로 정의되는 독자 실행 에이전트 파이프라인을 저장소에
+agent-pipeline-builder 는 YAML 로 정의되는 독자 실행 에이전트 파이프라인을 저장소에
 스캐폴딩해 주는 Claude Code 플러그인입니다. 도메인을 한 번 설명하면 플러그인이
 오케스트레이션 스킬과 전용 에이전트 팀, 트리거 배선까지 생성합니다. 이후의
 기능 요청은 결정적 그래프를 따라 흐릅니다. 분석하고, 스펙을 확정하고, 구현과
@@ -14,9 +14,9 @@ graph-builder 는 YAML 로 정의되는 독자 실행 에이전트 파이프라�
 수렴 루프를 돕니다.
 
 ```
-graph-builder 플러그인
-  ├─ graph-builder:build   # 오케스트레이션 구성 (6단계)
-  └─ graph-builder:edit    # 설치된 파이프라인의 변경과 진단
+agent-pipeline-builder 플러그인
+  ├─ agent-pipeline-builder:build   # 오케스트레이션 구성 (6단계)
+  └─ agent-pipeline-builder:edit    # 설치된 파이프라인의 변경과 진단
         │
         ▼  "이 프로젝트에 개발 오케스트레이션 구성해 줘"
 <프로젝트>/
@@ -30,7 +30,7 @@ graph-builder 플러그인
 산출물은 스스로 동작합니다. 스캐폴딩이 끝나면 이 플러그인 없이 Python 3 와
 `claude` CLI 만으로 실행됩니다.
 
-## 왜 graph-builder 인가
+## 왜 agent-pipeline-builder 인가
 
 - **결정적 오케스트레이션.** 그래프를 스케줄링하는 주체가 LLM 이 아니라
   스크립트입니다. 같은 입력이면 같은 흐름이 나오고, 분기와 팬아웃, 피드백
@@ -53,18 +53,18 @@ graph-builder 플러그인
 ## 설치
 
 ```
-/plugin marketplace add Korea-DongheeHan/graph-builder
-/plugin install graph-builder@graph-builder-marketplace
+/plugin marketplace add Korea-DongheeHan/agent-pipeline-builder
+/plugin install agent-pipeline-builder@agent-pipeline-builder-marketplace
 ```
 
 ## 이렇게 말하면 됩니다
 
 원하는 일에 따라 이런 표현이 트리거됩니다.
 
-- **새 오케스트레이션 구축** (`graph-builder:build`). "개발 오케스트레이션
+- **새 오케스트레이션 구축** (`agent-pipeline-builder:build`). "개발 오케스트레이션
   구성해 줘", "이 프로젝트에 파이프라인 구축해 줘", "하네스 만들어 줘",
   "우리 오케스트레이터 스킬을 그래프로 변환해 줘".
-- **설치된 파이프라인 변경과 진단** (`graph-builder:edit`). "파이프라인에 보안
+- **설치된 파이프라인 변경과 진단** (`agent-pipeline-builder:edit`). "파이프라인에 보안
   검사 단계 추가해 줘", "수렴 루프 상한을 3으로 바꿔 줘", "qa 를 command
   노드로 바꿔 줘", "어제 파이프라인 실행이 왜 실패했는지 봐 줘".
 - **스캐폴딩된 파이프라인 실행** (이 플러그인이 아니라 프로젝트의 CLAUDE.md 가
@@ -81,7 +81,7 @@ graph-builder 플러그인
 여섯 단계를 진행하며, 중요한 지점마다 사용자 확인을 받습니다.
 
 1. **감사.** 기존 파이프라인과 에이전트, CLAUDE.md 마커를 감지합니다. 변경
-   요청이면 새로 만들지 않고 `graph-builder:edit` 로 라우팅합니다.
+   요청이면 새로 만들지 않고 `agent-pipeline-builder:edit` 로 라우팅합니다.
 2. **분석.** 기술 스택과 실제 빌드·테스트 명령, 컨벤션 문서를 읽습니다.
    추측하지 않습니다.
 3. **설계 확인.** 노드와 에이전트 표, 흐름 mermaid 다이어그램을 제시하고
@@ -331,7 +331,7 @@ workflow:
 - **사람 게이트.** headless 노드는 질문할 수 없습니다. 스펙 확정은 게이트에서
   이루어지고, 커밋과 머지는 실행이 끝난 뒤 사람이 합니다.
 - **진화 루프.** 피드백은 구체적인 수정 대상(프롬프트, 에이전트, YAML)으로
-  매핑되며, `graph-builder:edit` 가 검증과 변경 이력 기록을 포함해 반영합니다.
+  매핑되며, `agent-pipeline-builder:edit` 가 검증과 변경 이력 기록을 포함해 반영합니다.
 
 ## 평가 스위트
 
@@ -340,7 +340,7 @@ workflow:
 아무것도 만들지 않는 트리거 절제를 검사합니다.
 
 ```
-claude plugin eval graph-builder@graph-builder-marketplace --scaffold --runs 1
+claude plugin eval agent-pipeline-builder@agent-pipeline-builder-marketplace --scaffold --runs 1
 ```
 
 `plugin eval` 은 아직 얼리 액세스입니다. 결정적 그래프 엔진은 별도로
@@ -351,13 +351,13 @@ claude plugin eval graph-builder@graph-builder-marketplace --scaffold --runs 1
 ```
 .claude-plugin/                     # 매니페스트와 셀프 호스팅 마켓플레이스
 skills/
-  build/                            # graph-builder:build — 구성 담당
+  build/                            # agent-pipeline-builder:build — 구성 담당
     SKILL.md                        # 6단계 절차
     scripts/run_graph.py            # 실행 엔진 (모든 산출물에 복사됨)
     templates/pipeline-dev/         # 산출물 스킬 골격 (SKILL.md, yml, prompts)
     templates/agents/               # 에이전트 정의 골격 (5개 역할)
     references/                     # yml 스펙, 팀 패턴, 에이전트 가이드,
                                     # 프롬프트 가이드, 세션 모드 규칙
-  edit/                             # graph-builder:edit — 변경과 진단
+  edit/                             # agent-pipeline-builder:edit — 변경과 진단
 evals/                              # 스킬 계층 평가 케이스 (build / edit / 트리거)
 ```

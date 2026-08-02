@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-graph-builder 러너: pipeline.yml + 프롬프트 파일로 정의된 에이전트 그래프를 실행한다.
+agent-pipeline-builder 러너: pipeline.yml + 프롬프트 파일로 정의된 에이전트 그래프를 실행한다.
 
 - 노드 = 서브 에이전트 (claude -p 헤드리스 세션)
 - 엣지 = 트리거 (when 조건부 분기, loop 피드백 순환)

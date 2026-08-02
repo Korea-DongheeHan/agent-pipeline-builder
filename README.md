@@ -1,12 +1,12 @@
-# graph-builder
+# agent-pipeline-builder
 
 **Build a multi-agent development orchestration for your project from a single sentence.**
 
 English · [한국어](README.ko.md)
 
-![graph-builder: pipeline.yml compiled into a deterministic multi-agent graph](docs/hero.svg)
+![agent-pipeline-builder: pipeline.yml compiled into a deterministic multi-agent graph](docs/hero.svg)
 
-graph-builder is a Claude Code plugin that scaffolds a self-contained, YAML-driven
+agent-pipeline-builder is a Claude Code plugin that scaffolds a self-contained, YAML-driven
 agent pipeline into your repository. Describe your domain once, and the plugin
 generates an orchestration skill, a specialized agent team, and the trigger wiring.
 From then on, feature requests run through a deterministic graph:
@@ -14,9 +14,9 @@ analyze, confirm the spec, implement and test in parallel, verify, review,
 and loop until acceptance passes.
 
 ```
-graph-builder plugin
-  ├─ graph-builder:build   # scaffold an orchestration (6 phases)
-  └─ graph-builder:edit    # modify and diagnose an installed pipeline
+agent-pipeline-builder plugin
+  ├─ agent-pipeline-builder:build   # scaffold an orchestration (6 phases)
+  └─ agent-pipeline-builder:edit    # modify and diagnose an installed pipeline
         │
         ▼  "Set up a dev orchestration for this project"
 <your-project>/
@@ -30,7 +30,7 @@ graph-builder plugin
 The output runs on its own. Once scaffolded, the pipeline needs neither this
 plugin nor any dependency beyond Python 3 and the `claude` CLI.
 
-## Why graph-builder
+## Why agent-pipeline-builder
 
 - **Deterministic orchestration.** A script, not an LLM, schedules the graph:
   same input, same flow. Branching, fan-out/fan-in, feedback loops, and loop
@@ -52,18 +52,18 @@ plugin nor any dependency beyond Python 3 and the `claude` CLI.
 ## Install
 
 ```
-/plugin marketplace add Korea-DongheeHan/graph-builder
-/plugin install graph-builder@graph-builder-marketplace
+/plugin marketplace add Korea-DongheeHan/agent-pipeline-builder
+/plugin install agent-pipeline-builder@agent-pipeline-builder-marketplace
 ```
 
 ## What to say
 
 Trigger phrases, by what you want:
 
-- **Build a new orchestration** (`graph-builder:build`) — "Set up a development
+- **Build a new orchestration** (`agent-pipeline-builder:build`) — "Set up a development
   orchestration", "Build an agent pipeline for this repo", "Create a harness",
   "Convert our orchestrator skill into a graph".
-- **Change or diagnose an installed pipeline** (`graph-builder:edit`) — "Add a
+- **Change or diagnose an installed pipeline** (`agent-pipeline-builder:edit`) — "Add a
   security-scan step to the pipeline", "Raise the convergence loop cap to 3",
   "Turn qa into a command node", "Why did yesterday's pipeline run fail?".
 - **Run the scaffolded pipeline** (triggered by your project's CLAUDE.md, not by
@@ -80,7 +80,7 @@ In any project, say *"Set up a development orchestration"*. The `build` skill
 walks six phases and asks for your confirmation where it matters:
 
 1. **Audit.** Detects existing pipelines, agents, and CLAUDE.md markers.
-   Maintenance requests get routed to `graph-builder:edit` instead of
+   Maintenance requests get routed to `agent-pipeline-builder:edit` instead of
    duplicating anything.
 2. **Analyze.** Reads your stack, real build/test commands, and convention
    documents. Nothing is guessed.
@@ -335,7 +335,7 @@ by simply asking ("run it in session mode").
 - **Human gates.** Headless nodes cannot ask questions. Spec confirmation
   happens at the gate; commits and merges happen after the run, by you.
 - **Evolution loop.** Feedback maps to a concrete fix target (prompts, agents,
-  or YAML), and `graph-builder:edit` applies changes with validation and a
+  or YAML), and `agent-pipeline-builder:edit` applies changes with validation and a
   changelog entry.
 
 ## Evals
@@ -345,7 +345,7 @@ completeness, in-place editing (no duplicate pipelines), and trigger
 discipline (a plain code question must not scaffold anything):
 
 ```
-claude plugin eval graph-builder@graph-builder-marketplace --scaffold --runs 1
+claude plugin eval agent-pipeline-builder@agent-pipeline-builder-marketplace --scaffold --runs 1
 ```
 
 `plugin eval` is in early access; the deterministic graph engine is covered
@@ -356,13 +356,13 @@ separately by `--validate` and `--mock` regression (22 checks per release).
 ```
 .claude-plugin/                     # manifest + self-hosted marketplace
 skills/
-  build/                            # graph-builder:build — the scaffolder
+  build/                            # agent-pipeline-builder:build — the scaffolder
     SKILL.md                        # 6-phase procedure
     scripts/run_graph.py            # the engine (copied into every output)
     templates/pipeline-dev/         # output skill skeleton (SKILL.md, yml, prompts)
     templates/agents/               # agent definition skeletons (5 roles)
     references/                     # yml spec, team patterns, agent guide,
                                     # prompt guide, session-mode rules
-  edit/                             # graph-builder:edit — change & diagnose
+  edit/                             # agent-pipeline-builder:edit — change & diagnose
 evals/                              # skill-layer eval cases (build / edit / trigger)
 ```

@@ -1,9 +1,9 @@
 ---
 name: build
-description: 멀티 에이전트 개발 오케스트레이션을 프로젝트에 구축하는 메타 스킬. 에이전트 팀이나 그래프 파이프라인을 새로 구성하거나 기존 하네스 스킬을 그래프로 변환하는 작업에 사용한다. 설치된 파이프라인의 변경은 graph-builder:edit 가 담당한다.
+description: 멀티 에이전트 개발 오케스트레이션을 프로젝트에 구축하는 메타 스킬. 에이전트 팀이나 그래프 파이프라인을 새로 구성하거나 기존 하네스 스킬을 그래프로 변환하는 작업에 사용한다. 설치된 파이프라인의 변경은 agent-pipeline-builder:edit 가 담당한다.
 ---
 
-# graph-builder:build — 개발 오케스트레이션 구성
+# agent-pipeline-builder:build — 개발 오케스트레이션 구성
 
 도메인 설명 한 문장에서 **프로젝트에서 독자적으로 동작하는 개발 오케스트레이션**을
 만든다. 이 스킬은 구성할 때만 쓰이고, 산출물은 플러그인 없이 실행된다.
@@ -31,7 +31,7 @@ description: 멀티 에이전트 개발 오케스트레이션을 프로젝트에
 무엇이든 만들기 전에 기존 산출물을 감사하고 실행 모드를 정한다:
 
 - 확인: `.claude/skills/*/pipeline.yml`(설치된 파이프라인), `.claude/agents/`,
-  CLAUDE.md 의 `graph-builder:*` 마커 블록
+  CLAUDE.md 의 `agent-pipeline-builder:*` 마커 블록
 - **정합성(drift) 점검** — 발견한 산출물끼리 어긋나면(yml 의 `agent:` 가
   없는 에이전트를 가리킴, 마커는 있는데 스킬 디렉토리가 없음 등) 먼저 보고한다
 
@@ -39,7 +39,7 @@ description: 멀티 에이전트 개발 오케스트레이션을 프로젝트에
 |---|---|
 | 산출물 없음 | **신규 구축** — Phase 1 부터 진행 |
 | 파이프라인 있음 + 새 파이프라인/노드·에이전트 추가 요구 | **확장** — 기존 이름·에이전트와 충돌하지 않게 Phase 1 부터 진행 (중복 생성 금지) |
-| 파이프라인 있음 + 변경·수정·진단 요구 | **유지보수 — 이 스킬을 쓰지 말고 `graph-builder:edit` 로 라우팅한다** |
+| 파이프라인 있음 + 변경·수정·진단 요구 | **유지보수 — 이 스킬을 쓰지 말고 `agent-pipeline-builder:edit` 로 라우팅한다** |
 
 ## Phase 1: 프로젝트 분석
 
@@ -104,12 +104,12 @@ description: 멀티 에이전트 개발 오케스트레이션을 프로젝트에
 같은 마커가 있으면 교체):
 
 ```markdown
-<!-- graph-builder:<파이프라인명> start -->
+<!-- agent-pipeline-builder:<파이프라인명> start -->
 ## 개발 오케스트레이션: <파이프라인명>
 개발·기능 수정·테스트 보강·리뷰 요구사항 요청 시
 `.claude/skills/<파이프라인명>` 스킬(개발 오케스트레이션)을 사용해 수행하라.
 단일 파일 수준의 얇은 변경은 직접 수행한다.
-<!-- graph-builder:<파이프라인명> end -->
+<!-- agent-pipeline-builder:<파이프라인명> end -->
 ```
 
 ## Phase 6: 검증·인계 (필수 — 건너뛰지 마라)
@@ -135,7 +135,7 @@ grep -rn "{{" $PL .claude/agents/<prefix>-*.md | grep -v "{{vars\.\|{{run\.\|{{n
 인계 보고에 포함: 생성 파일 트리, CLAUDE.md 등록 내용, **비용 특성**(노드
 1회 = claude 세션 1개, 최대 세션 수 추정), 실행 모드 2가지(러너=결정적·resume /
 세션=트리 UI 관찰), 컨텍스트 격리 특성, permission-mode 확인, 이후 구성 변경은
-`graph-builder:edit` 사용 안내.
+`agent-pipeline-builder:edit` 사용 안내.
 
 ## 참조
 

@@ -7,7 +7,7 @@
 # 일시정지(exit 3)한다. 오케스트레이터(Claude)가 AskUserQuestion 으로 스펙을
 # 확정한 뒤 --resume + --var decisions="확정 요약" 으로 재개한다.
 #
-# 문법 요약 (전체 스펙: graph-builder 플러그인 references/yml-spec.md):
+# 문법 요약 (전체 스펙: agent-pipeline-builder 플러그인 references/yml-spec.md):
 #   - 노드 나열 = 순차 (START/END 자동 연결)
 #   - parallel: [a, b] = Fan-Out, 다음 스텝에서 Fan-In
 #   - 노드에 {if, goto, max, exhausted} 부착 = 상태 체크 점프

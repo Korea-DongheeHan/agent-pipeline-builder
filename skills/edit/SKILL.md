@@ -1,9 +1,9 @@
 ---
 name: edit
-description: 설치된 그래프 파이프라인의 구성 변경과 진단 스킬. 노드나 에이전트의 추가와 제거, 분기·루프·판정 기준 조정, 파이프라인 실행 실패의 원인 분석에 사용한다. 새 오케스트레이션 구축은 graph-builder:build 가 담당한다.
+description: 설치된 그래프 파이프라인의 구성 변경과 진단 스킬. 노드나 에이전트의 추가와 제거, 분기·루프·판정 기준 조정, 파이프라인 실행 실패의 원인 분석에 사용한다. 새 오케스트레이션 구축은 agent-pipeline-builder:build 가 담당한다.
 ---
 
-# graph-builder:edit — 파이프라인 구성 변경·진단
+# agent-pipeline-builder:edit — 파이프라인 구성 변경·진단
 
 설치된 오케스트레이션의 **yml·프롬프트·에이전트를 안전하게 바꾼다.**
 원칙: 변경은 3계층(흐름=yml, 태스크 입력=prompts, 역할=agents)을 동기화하고,
@@ -62,7 +62,7 @@ python3 $PL/scripts/run_graph.py $PL/pipeline.yml --mock --mock-output '<노드>
 ## 주의
 
 - `scripts/run_graph.py` 는 수정하지 않는다 — 엔진 버그·기능 요구는
-  graph-builder 플러그인 쪽 이슈다.
+  agent-pipeline-builder 플러그인 쪽 이슈다.
 - 노드 실패를 처리하는 엣지가 없으면 파이프라인 즉시 실패가 **기본 동작**이다
   — 무조건 실패 분기를 추가하지 말고 그 동작이 맞는지 먼저 판단한다.
 - 검증 없이 변경을 끝내지 않는다. mock 을 건너뛴 변경은 미완성이다.

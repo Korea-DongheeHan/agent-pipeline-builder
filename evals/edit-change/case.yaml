@@ -4,7 +4,7 @@ runs: 1
 context:
   scaffold_script: |
     mkdir -p .claude/skills/demo-pipeline-dev/prompts .claude/skills/demo-pipeline-dev/scripts
-    curl -fsSL https://raw.githubusercontent.com/Korea-DongheeHan/graph-builder/main/skills/build/scripts/run_graph.py \
+    curl -fsSL https://raw.githubusercontent.com/Korea-DongheeHan/agent-pipeline-builder/main/skills/build/scripts/run_graph.py \
       -o .claude/skills/demo-pipeline-dev/scripts/run_graph.py
     cat > .claude/skills/demo-pipeline-dev/pipeline.yml <<'YML'
     name: demo-pipeline-dev
@@ -21,7 +21,7 @@ context:
     YML
     printf '# implement task\n' > .claude/skills/demo-pipeline-dev/prompts/implement.md
     printf '# review task\n' > .claude/skills/demo-pipeline-dev/prompts/review.md
-    printf '<!-- graph-builder:demo-pipeline-dev start -->\nUse .claude/skills/demo-pipeline-dev for dev requests.\n<!-- graph-builder:demo-pipeline-dev end -->\n' > CLAUDE.md
+    printf '<!-- agent-pipeline-builder:demo-pipeline-dev start -->\nUse .claude/skills/demo-pipeline-dev for dev requests.\n<!-- agent-pipeline-builder:demo-pipeline-dev end -->\n' > CLAUDE.md
 execution:
   prompt: |
     Add a security-scan step to our pipeline: it must run after implement and

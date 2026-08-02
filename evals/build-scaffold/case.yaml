@@ -30,9 +30,9 @@ graders:
   - type: llm
     name: scaffold-quality
     criteria: |
-      The agent completed the graph-builder build procedure: it generated the
+      The agent completed the agent-pipeline-builder build procedure: it generated the
       pipeline skill (SKILL.md, pipeline.yml, prompts) and five demo-* agent
       definitions with real project facts substituted (no {{placeholder}} left),
-      registered a graph-builder marker block in CLAUDE.md, ran the graph
+      registered a agent-pipeline-builder marker block in CLAUDE.md, ran the graph
       validation and a mock check, and the final report states the expected
       session cost and the two execution modes.

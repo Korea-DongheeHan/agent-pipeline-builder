@@ -1,14 +1,14 @@
 {
-  "name": "graph-builder-marketplace",
+  "name": "agent-pipeline-builder-marketplace",
   "metadata": {
-    "description": "Marketplace for the graph-builder plugin"
+    "description": "Marketplace for the agent-pipeline-builder plugin"
   },
   "owner": {
     "name": "landsnail"
   },
   "plugins": [
     {
-      "name": "graph-builder",
+      "name": "agent-pipeline-builder",
       "source": "./",
       "description": "Deterministic YAML-driven multi-agent dev orchestration: scaffold a pipeline skill and agent team into your repo (build), then evolve it in place (edit)."
     }
