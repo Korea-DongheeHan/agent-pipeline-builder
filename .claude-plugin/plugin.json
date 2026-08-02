@@ -1,6 +1,6 @@
 {
   "name": "agent-pipeline-builder",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Builds deterministic multi-agent development orchestrations for Claude Code. The build skill scaffolds a self-contained pipeline into your repo — a YAML graph, a stdlib-only runner, node prompts, a project agent team, and a CLAUDE.md trigger; the edit skill changes and diagnoses installed pipelines. The graph language covers parallel fan-out/fan-in, conditional routing, capped feedback loops, human gates with pause/resume, deterministic shell (command) nodes, mock verification, and localized logs (en/ko). Two execution modes: deterministic runner or observable session mode.",
   "author": {
     "name": "landsnail"
