@@ -2,7 +2,7 @@
 
 **한 문장의 설명에서 프로젝트 전용 멀티 에이전트 개발 오케스트레이션을 만들어 냅니다.**
 
-[English](README.md) · 한국어
+[English](README.md) · 한국어 · [中文](README.zh.md)
 
 ![agent-pipeline-builder: pipeline.yml 이 결정적 멀티 에이전트 그래프로 컴파일되는 모습](docs/hero.svg)
 

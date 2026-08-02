@@ -2,7 +2,7 @@
 
 **Build a multi-agent development orchestration for your project from a single sentence.**
 
-English · [한국어](README.ko.md)
+English · [한국어](README.ko.md) · [中文](README.zh.md)
 
 ![agent-pipeline-builder: pipeline.yml compiled into a deterministic multi-agent graph](docs/hero.svg)
 

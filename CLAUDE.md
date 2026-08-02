@@ -13,8 +13,10 @@ repo IS the plugin — every file under `skills/` ships to users.
 - GitHub: https://github.com/Korea-DongheeHan/agent-pipeline-builder (public, Apache-2.0).
 - Layout: `.claude-plugin/` manifests · `skills/build/` (scaffolder: SKILL.md,
   `scripts/run_graph.py`, `references/`, `templates/pipeline-dev/` with its
-  `agents/`) · `skills/edit/` · `evals/` · bilingual README (`README.md`
-  English, `README.ko.md` Korean — keep both in sync on user-facing changes).
+  `agents/`) · `skills/edit/` · `evals/` · trilingual README (`README.md`
+  English, `README.ko.md` Korean, `README.zh.md` Simplified Chinese).
+  **Whenever README.md changes, apply the same change to README.ko.md and
+  README.zh.md in the same commit.**
 
 ## Background Claude must know
 
