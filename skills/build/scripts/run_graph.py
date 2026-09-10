@@ -736,7 +736,7 @@ class Pipeline:
                 "timeout": nd.get("timeout"),  # 노드별 타임아웃(초) — 생략 시 settings
                 "gate": bool(nd.get("gate")),  # 게이트: 도달 시 일시정지, resume 으로 통과
                 "prompt": nd.get("prompt"),
-                "model": nd.get("model") or self.settings["model"],
+                "model": nd.get("model"),  # 명시 값만 보존 — settings.model 병합은 실행 시점에
                 "agent": nd.get("agent"),  # claude --agent (프로젝트 .claude/agents 정의)
                 "join": str(nd.get("join", "all")).lower(),
                 "retry": int(nd.get("retry", 0)),
@@ -1318,8 +1318,12 @@ class Runner:
         cmd = [bin_, "-p", "--output-format", "json"]
         if nd["agent"]:
             cmd += ["--agent", str(nd["agent"])]
-        if nd["model"]:
-            cmd += ["--model", str(nd["model"])]
+        # 우선순위: 노드 명시 model > 에이전트 정의의 model > settings.model.
+        # --model 은 --agent 정의의 모델보다 우선하므로, agent 노드에는
+        # 노드에 명시된 경우에만 넘긴다 (settings.model 로 덮지 않는다)
+        model = nd["model"] or (None if nd["agent"] else s["model"])
+        if model:
+            cmd += ["--model", str(model)]
         if nd["allowed_tools"]:
             cmd += ["--allowedTools", str(nd["allowed_tools"])]
         cmd += [str(a) for a in s["claude_args"]]

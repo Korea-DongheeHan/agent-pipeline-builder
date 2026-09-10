@@ -100,7 +100,7 @@ Block semantics:
 | `max_total_steps` | 100 | Cap on total node activations (runaway guard) |
 | `context_max_chars` | 8000 | Per-node cap when injecting upstream output into a prompt |
 | `claude_args` | `[]` | Extra claude CLI args for every node, e.g. `["--permission-mode", "acceptEdits"]` |
-| `model` | (none) | Default model; per-node `model` wins |
+| `model` | (none) | Default model for nodes **without** `agent:`. An agent node keeps its agent definition's model; only a node-level `model` overrides that |
 | `claude_bin` | `claude` | Path to the claude binary (env `CLAUDE_BIN` also works) |
 
 ## nodes
@@ -123,7 +123,9 @@ nodes:
   - id: review                 # required, unique. START/END/FAIL are reserved
     prompt: prompts/review.md  # required (except gate/command). Relative to the cwd where
                                # the script runs; falls back to the pipeline.yml directory
-    model: opus                # optional per-node model
+    model: opus                # optional per-node model. Precedence: node model >
+                               # agent definition's model > settings.model
+                               # (settings.model never overrides an agent definition)
     agent: my-reviewer         # optional; claude --agent — uses the repo's
                                # .claude/agents/<name> definition (model, tools, system prompt)
     join: all                  # all (default) | any — fan-in policy (the workflow DSL sets this automatically)
