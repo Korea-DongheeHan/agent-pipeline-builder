@@ -302,6 +302,7 @@ workflow:
 | 범위형 루프 블록 | `loop: {body, redo, max, exhausted}` |
 | 사람 확인 지점 | `gate: true` 노드. 일시정지(종료 코드 3) 후 확정 값과 함께 resume |
 | 결정적 셸 단계 | `type: command` 노드. 에이전트 세션 없이 실행하며 exit code 로 판정하고 stdout 의 `GRAPH_OUTPUT` 이 분기에 쓰임 |
+| 재작업 에이전트 유지 | `persist: true` 노드. session 모드에서 루프 재진입 시 살아 있는 서브에이전트에게 SendMessage 로 피드백을 전달하며 재스폰하지 않음. 러너는 이 키를 무시함 |
 | 저수준 엣지 | `edges:` 와 `route == heavy` 같은 when 표현식, `to: FAIL` 종결 |
 | 상태와 재개 | `.graph-runs/<run-id>/state.json`, 성공 노드를 캐시하는 `--resume` |
 | 사전 검증 | `--validate`, `--dry-run`, `--mermaid`, 상태·출력 대본을 주는 `--mock` |

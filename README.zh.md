@@ -287,6 +287,7 @@ workflow:
 | 有作用域的循环块 | `loop: {body, redo, max, exhausted}` |
 | 人工检查点 | `gate: true` 节点 — 暂停（exit 3），确认后携带值续跑 |
 | 确定性 shell 步骤 | `type: command` 节点 — 无智能体会话；exit code 即判定，stdout 的 `GRAPH_OUTPUT` 参与路由 |
+| 返工智能体常驻 | `persist: true` 节点 — session 模式下，循环重入时通过 SendMessage 向存活的子智能体发送反馈而非重新生成；runner 忽略该键 |
 | 低层边 | `edges:`，支持 `route == heavy` 这类 when 表达式，`to: FAIL` 终止 |
 | 状态与续跑 | `.graph-runs/<run-id>/state.json`，`--resume` 复用成功节点缓存 |
 | 干跑验证 | `--validate`、`--dry-run`、`--mermaid`、可编排状态/输出脚本的 `--mock` |

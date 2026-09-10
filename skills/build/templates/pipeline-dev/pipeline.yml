@@ -44,6 +44,9 @@ nodes:
   - id: implement
     agent: "{{prefix}}-implementer"
     prompt: prompts/implement.md
+    persist: true                      # session mode: keep the subagent alive across
+                                       # rework loops (feedback via SendMessage).
+                                       # Runner mode ignores this
   - id: test
     agent: "{{prefix}}-test-engineer"
     prompt: prompts/test.md

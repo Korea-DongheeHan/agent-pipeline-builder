@@ -129,6 +129,9 @@ nodes:
     join: all                  # all (default) | any — fan-in policy (the workflow DSL sets this automatically)
     retry: 1                   # optional immediate retries on FAILED (default 0)
     allowed_tools: "Read Bash" # optional; passed as --allowedTools
+    persist: true              # optional; session mode only — keep the subagent alive
+                               # across loop iterations and send feedback via SendMessage
+                               # instead of respawning. Runner mode ignores it
     context: [architect]       # optional; inject these nodes' outputs even if not direct upstream
     append_prompt: |           # optional inline instructions appended after the prompt file
       extra instructions...
@@ -137,6 +140,12 @@ nodes:
 - `join: all` — every non-loop inbound edge must arrive before the node runs
   (fan-in synchronization).
 - `join: any` — the first arrival runs it (branch merge points).
+- `persist: true` — session-mode execution detail (see
+  `references/session-mode.md`, "Persistent nodes"). It changes how a loop
+  re-entry executes the node, never the graph semantics: loop caps, iterN
+  artifacts, and fan-in behave identically. Put it on builder-type nodes
+  (implementer) only; judgment nodes (QA, reviewer) benefit from a fresh
+  isolated session each iteration. The runner ignores the key.
 - **Sticky arrivals**: a satisfied precondition stays satisfied. In a feedback
   loop where only the failed path re-runs, a fan-in node re-triggers with
   (previous arrivals + the new one) — but if an upstream node is still

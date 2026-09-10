@@ -307,6 +307,7 @@ parallel attempts.
 | Scoped loop block | `loop: {body, redo, max, exhausted}` |
 | Human checkpoint | `gate: true` node — pauses (exit 3), resume with confirmed values |
 | Deterministic shell steps | `type: command` node — no agent session; exit code is the verdict, stdout `GRAPH_OUTPUT` feeds routing |
+| Persistent rework agent | `persist: true` node — in session mode, a loop re-entry sends feedback to the live subagent (SendMessage) instead of respawning it; the runner ignores the key |
 | Low-level edges | `edges:` with `when` expressions such as `route == heavy`, `to: FAIL` termination |
 | State and resume | `.graph-runs/<run-id>/state.json`, `--resume` with cached successes |
 | Dry verification | `--validate`, `--dry-run`, `--mermaid`, `--mock` with scripted statuses and outputs |

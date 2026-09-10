@@ -42,6 +42,21 @@ pipeline.yml remains the single source of truth.
    questions-to-confirm section), inject the confirmed decisions into
    downstream prompts, then continue. Never run downstream nodes before the
    user answers.
+6-2. **Persistent nodes (`persist: true`)** — the node's subagent survives
+   loop iterations instead of being respawned.
+   - **First execution**: a normal Agent call; record the returned agent
+     name for later messaging.
+   - **Loop re-entry** (a backward goto reaches the node again): do not
+     spawn. SendMessage the recorded agent with the feedback summary from
+     the verdict node (QA/review), the artifact paths, and the same
+     GRAPH_STATUS / GRAPH_OUTPUT instruction. The agent already holds the
+     full working context, so never re-inline its own prior output.
+   - **Fallback**: if SendMessage fails or ListAgents no longer shows the
+     agent, spawn fresh per rule 2 with the prior output path plus the
+     feedback injected, and note the fallback in the final report.
+   - All other rules stay in force: loop caps (rule 6), per-iteration
+     `<node>.iterN.md` artifacts (rule 7), fan-in and condition verdicts.
+     `persist` changes how the node executes, never what the graph means.
 7. **Preserve artifacts** — write each node's full result to
    `.graph-runs/session-<YYYYMMDD-HHMMSS>/outputs/<node>.iterN.md` and keep
    only summaries in the session context.
