@@ -135,8 +135,8 @@ AskUserQuestion 与你确认规格，然后携带决策续跑：
 
 ```bash
 $ python3 $PL/scripts/run_graph.py $PL/pipeline.yml --resume 20260731-100211-ab12 \
-    --var requirement="..." \
     --var decisions="scope: refunds after settlement excluded; API: extend existing endpoint"
+# 首次运行的 requirement 会从 <run-dir>/vars.json 自动恢复
 
 [10:07:02] ⏩ analyst reused from cache
 [10:07:02] ⏩ gate spec-gate passed (confirmed in a previous run)

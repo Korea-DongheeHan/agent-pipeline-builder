@@ -1,25 +1,25 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-agent-pipeline-builder 러너: pipeline.yml + 프롬프트 파일로 정의된 에이전트 그래프를 실행한다.
+agent-pipeline-builder runner: executes an agent graph defined by pipeline.yml + prompt files.
 
-- 노드 = 서브 에이전트 (claude -p 헤드리스 세션)
-- 엣지 = 트리거 (when 조건부 분기, loop 피드백 순환)
-- Fan-Out(to 리스트) / Fan-In(join: all|any) / 조건 분기 / 피드백 루프 지원
-- 상태는 <state_dir>/<run-id>/state.json 에 저장, --resume 으로 재개
+- node = a subagent (claude -p headless session)
+- edge = a trigger (when conditional branching, loop feedback cycles)
+- Supports fan-out (to lists) / fan-in (join: all|any) / conditional branches / feedback loops
+- State is saved to <state_dir>/<run-id>/state.json; resume with --resume
 
-사용법:
-  python3 scripts/run_graph.py pipeline.yml                 # 실행
-  python3 scripts/run_graph.py pipeline.yml --validate      # 검증만
-  python3 scripts/run_graph.py pipeline.yml --dry-run       # 실행 계획 출력
-  python3 scripts/run_graph.py pipeline.yml --mermaid       # mermaid 다이어그램 출력
-  python3 scripts/run_graph.py pipeline.yml --mock          # claude 호출 없는 모의 실행
+Usage:
+  python3 scripts/run_graph.py pipeline.yml                 # run
+  python3 scripts/run_graph.py pipeline.yml --validate      # validate only
+  python3 scripts/run_graph.py pipeline.yml --dry-run       # print the execution plan
+  python3 scripts/run_graph.py pipeline.yml --mermaid       # print a mermaid diagram
+  python3 scripts/run_graph.py pipeline.yml --mock          # mock run without claude calls
   python3 scripts/run_graph.py pipeline.yml --mock --mock-status review=FAILED,SUCCEEDED
   python3 scripts/run_graph.py pipeline.yml --resume RUN_ID
   python3 scripts/run_graph.py pipeline.yml --var ticket=ABC-123
 
-의존성: Python 3 표준 라이브러리만 사용. PyYAML이 설치돼 있으면 우선 사용하고,
-없으면 내장 미니 YAML 파서(이 파이프라인 스키마에 필요한 부분집합)로 폴백한다.
+Dependencies: Python 3 standard library only. PyYAML is preferred when installed;
+otherwise a built-in mini YAML parser (the subset this pipeline schema needs) is used.
 """
 import argparse
 import json
@@ -90,6 +90,10 @@ MESSAGES = {
                     "If downstream routing needs values, put a one-line JSON right above it:\n\n"
                     "GRAPH_OUTPUT: {\"key\": \"value\"}\n",
         "validated": "validation passed: %d nodes, %d edges (%s)",
+        "session_error": "claude session error",
+        "plan_header": "execution plan (parallel waves, feedback loops excluded):",
+        "plan_loops": "feedback loops:",
+        "plan_conds": "conditional branches:",
     },
     "ko": {
         "start": "▶ 파이프라인 '%s' 시작 — run_id=%s%s",
@@ -137,6 +141,10 @@ MESSAGES = {
                     "후속 노드의 분기 판정에 필요한 값이 있으면 그 **직전 줄**에 한 줄 JSON 으로:\n\n"
                     "GRAPH_OUTPUT: {\"key\": \"value\"}\n",
         "validated": "검증 통과: 노드 %d개, 엣지 %d개 (%s)",
+        "session_error": "claude 세션 오류",
+        "plan_header": "실행 계획 (병렬 wave, 피드백 루프 제외):",
+        "plan_loops": "피드백 루프:",
+        "plan_conds": "조건 분기:",
     },
 }
 
@@ -965,6 +973,19 @@ class Runner:
             self.prev_nodes = json.loads(sf.read_text()).get("nodes", {})
         (self.run_dir / "prompts").mkdir(parents=True, exist_ok=True)
         (self.run_dir / "outputs").mkdir(parents=True, exist_ok=True)
+        # vars 영속화: yml 기본값 < 저장된 vars.json < CLI --var 순으로 병합하고
+        # 결과를 vars.json 에 저장한다 — --resume 시 --var 재전달이 필요 없고,
+        # 게이트 확정값은 vars.json 수정만으로도 주입할 수 있다
+        vf = self.run_dir / "vars.json"
+        saved = {}
+        if args.resume and vf.is_file():
+            try:
+                saved = json.loads(vf.read_text())
+            except (json.JSONDecodeError, OSError) as ex:
+                # vars.json 은 손으로 고쳐 주입하는 파일이다 — 손상 시 명확한 오류로
+                raise PipelineError("invalid vars.json: %s (%s)" % (vf, ex))
+        self.vars = {**saved, **(args.var or {})}
+        vf.write_text(json.dumps(self.vars, ensure_ascii=False, indent=2))
 
         self.results = {}  # node -> {status, outputs, text, output_file, iteration}
         self.edge_fired = {}  # edge key -> count (loop 엣지)
@@ -1275,7 +1296,7 @@ class Runner:
         subs = {"run.id": self.run_id, "node.id": node_id, "node.iteration": str(it)}
         for k, v in (self.pipe.vars or {}).items():
             subs["vars.%s" % k] = str(v)
-        for k, v in (self.args.var or {}).items():
+        for k, v in (self.vars or {}).items():
             subs["vars.%s" % k] = str(v)
         for k, v in subs.items():
             text = text.replace("{{%s}}" % k, v)
@@ -1344,7 +1365,7 @@ class Runner:
             data = json.loads(proc.stdout)
             text = data.get("result") or ""
             if data.get("is_error"):
-                return "FAILED", {}, text or "claude 세션 오류"
+                return "FAILED", {}, text or self.msg["session_error"]
         except (json.JSONDecodeError, AttributeError):
             pass
         if proc.returncode != 0:
@@ -1501,12 +1522,13 @@ def dry_run(pipe):
                 if e["dst"] == d and e["src"] != START
             )
         )
-    out = ["실행 계획 (병렬 wave, 피드백 루프 제외):"]
+    m = MESSAGES.get(str(pipe.settings.get("lang", "en")), MESSAGES["en"])
+    out = [m["plan_header"]]
     for i, w in enumerate(waves, 1):
         out.append("  wave %d: %s" % (i, ", ".join(w)))
     loops = [e for e in pipe.edges if e["loop"]]
     if loops:
-        out.append("피드백 루프:")
+        out.append(m["plan_loops"])
         for e in loops:
             out.append(
                 "  %s → %s  [%s]" % (e["src"], e["dst"], _cond_label(e))
@@ -1517,7 +1539,7 @@ def dry_run(pipe):
         if not e["loop"] and _cond_label(e)
     ]
     if conds:
-        out.append("조건 분기:")
+        out.append(m["plan_conds"])
         for e in conds:
             out.append("  %s → %s  [%s]" % (e["src"], e["dst"], _cond_label(e)))
     return "\n".join(out)

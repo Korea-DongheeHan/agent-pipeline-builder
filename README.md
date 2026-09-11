@@ -149,8 +149,8 @@ resumes with the decisions injected:
 
 ```bash
 $ python3 $PL/scripts/run_graph.py $PL/pipeline.yml --resume 20260731-100211-ab12 \
-    --var requirement="..." \
     --var decisions="scope: refunds after settlement excluded; API: extend existing endpoint"
+# the original requirement is restored automatically from <run-dir>/vars.json
 
 [10:07:02] ⏩ analyst reused from cache
 [10:07:02] ⏩ gate spec-gate passed (confirmed in a previous run)

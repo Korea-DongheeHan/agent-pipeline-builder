@@ -63,10 +63,12 @@ definitions and build commands resolve from there).
       (max 4 questions)**, with the analyst's recommendation as the first
       option marked "(recommended)". If the section says "none", show the
       spec summary and get consent to proceed.
-   3. Condense the decisions into one paragraph and resume:
+   3. Condense the decisions into one paragraph and resume (vars from the
+      original run are restored from `<run-dir>/vars.json` — pass only the
+      new `decisions` value):
       ```bash
       python3 GRAPH_PIPELINE/scripts/run_graph.py GRAPH_PIPELINE/pipeline.yml \
-        --resume <RUN_ID> --var requirement="..." \
+        --resume <RUN_ID> \
         --var decisions="① scope: ... ② architecture: ... ③ done criteria: ..."
       ```
       (The succeeded analyst is served from cache, and the confirmed spec is

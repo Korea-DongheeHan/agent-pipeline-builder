@@ -73,10 +73,10 @@ merge nodes. More nodes mean more session cost and wider loops.
 Confirm with the user: ① the node/agent table (roles, models) ② the flow as a
 mermaid diagram (generate with `--mermaid` from the draft pipeline.yml)
 ③ the pipeline name (default `<domain>-pipeline-dev`, with the domain slug
-matching the agent prefix) ④ the **default execution mode** — runner
-(recommended: unattended, deterministic, resume, zero orchestration cost) vs
-session (live subagent view and intervention; no resume, main-session
-overhead). The choice is recorded in `settings.mode` of the output
+matching the agent prefix) ④ the **default execution mode** — session
+(recommended: live subagent view and mid-run intervention; no resume,
+main-session overhead) vs runner (unattended, deterministic, resume, zero
+orchestration cost). The choice is recorded in `settings.mode` of the output
 pipeline.yml and can be overridden verbally per run. ⑤ the **output
 language** — detect the project's primary documentation language and propose
 it as the default (en | ko). `settings.lang` switches the runner logs, and the

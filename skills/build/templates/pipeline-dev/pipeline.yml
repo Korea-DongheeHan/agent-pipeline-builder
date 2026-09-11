@@ -21,18 +21,23 @@ kind: development
 settings:
   lang: en               # language of runner logs and injected protocol (en | ko)
                          # — set to the language chosen at scaffold time
-  mode: runner           # default execution mode. runner = script execution
+  mode: session          # default execution mode. session = Claude runs it
+                         #   with the Agent tool (live tree view, intervention)
+                         # runner = script execution
                          #   (deterministic, resume, unattended)
-                         # session = Claude runs it with the Agent tool
-                         #   (live tree view, intervention)
-                         # Override per run by asking ("in session mode")
+                         # Override per run by asking ("in runner mode")
   parallelism: 4
   state_dir: .graph-runs
   claude_args: ["--permission-mode", "acceptEdits"]
   node_timeout: 3600
 
-vars:
-  requirement: "inject the requirement with --var requirement=..."
+vars:                      # pipeline inputs — declared here, filled per run.
+                           # Session mode: Claude fills them from the conversation.
+                           # Runner mode: --var overrides these defaults; merged
+                           # values persist in <run-dir>/vars.json, so --resume
+                           # needs no re-passing. Defaults below are sentinels
+                           # that surface a missing injection.
+  requirement: "(no requirement injected — state the task before running)"
   decisions: "(spec gate not confirmed — following the analyst draft's assumptions)"
 
 nodes:
@@ -50,9 +55,14 @@ nodes:
   - id: test
     agent: "{{prefix}}-test-engineer"
     prompt: prompts/test.md
+    model: sonnet                      # per-node model delegation: procedural roles run on
+                                       # a cheaper model. Judgment roles (analyst, reviewer)
+                                       # omit model to keep the strong default. Precedence:
+                                       # node model > agent definition > settings.model
   - id: qa
     agent: "{{prefix}}-qa"
     prompt: prompts/qa.md
+    model: sonnet
   - id: review
     agent: "{{prefix}}-reviewer"
     prompt: prompts/review.md

@@ -8,7 +8,8 @@ Full schema of the graph pipeline definition file. The runner is
 ```yaml
 name: my-pipeline        # pipeline name (defaults to the file name)
 kind: development        # development | workflow — sets the prompt style at scaffold time (documentation only)
-vars:                    # prompt variables, substituted as {{vars.KEY}}; --var KEY=VALUE overrides
+vars:                    # pipeline inputs, substituted as {{vars.KEY}}; --var KEY=VALUE overrides.
+                         # Merged values persist in <run-dir>/vars.json and are restored on --resume
   requirement: "..."
 settings: { ... }        # see below
 nodes: [ ... ]           # node (agent) definitions
@@ -139,6 +140,10 @@ nodes:
       extra instructions...
 ```
 
+- `model` — the value is passed to `claude --model` as-is: an alias (`opus`,
+  `sonnet`, `haiku`) or a full model id. The runner does not validate it; a
+  wrong name fails only when the node executes, so verify unusual names with
+  `claude -p --model <name> "ok"` before wiring them in.
 - `join: all` — every non-loop inbound edge must arrive before the node runs
   (fan-in synchronization).
 - `join: any` — the first arrival runs it (branch merge points).
@@ -233,8 +238,9 @@ python3 scripts/run_graph.py pipeline.yml            # run
   --mock                                             # simulated run without claude calls
   --mock-status NODE=FAILED,SUCCEEDED                # scripted statuses per iteration (last value repeats)
   --mock-output 'NODE={"route": "light"}'            # scripted GRAPH_OUTPUT
-  --resume RUN_ID                                    # resume; SUCCEEDED nodes served from cache
-  --var KEY=VALUE                                    # inject prompt variables
+  --resume RUN_ID                                    # resume; SUCCEEDED nodes served from cache,
+                                                     #   vars restored from <run-dir>/vars.json
+  --var KEY=VALUE                                    # inject prompt variables (persisted to vars.json)
 ```
 
 Exit codes: 0 success, 1 failure, 2 load/validation error, **3 gate pause**
@@ -246,6 +252,8 @@ injecting confirmed values with `--var`).
 ```
 <state_dir>/<run-id>/
   state.json                  # node statuses, outputs, loop counters (resume input)
+  vars.json                   # merged vars (yml defaults < saved < --var); --resume restores
+                              #   these, and editing the file injects values without --var
   run.log                     # automatic run log (same as console — no redirection needed)
   prompts/<node>.iterN.prompt.md   # the exact injected prompt (debugging)
   outputs/<node>.iterN.md          # full node output

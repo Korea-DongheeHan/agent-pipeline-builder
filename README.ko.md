@@ -148,8 +148,8 @@ AskUserQuestion 한 라운드로 스펙을 확정한 뒤, 결정 사항을 주�
 
 ```bash
 $ python3 $PL/scripts/run_graph.py $PL/pipeline.yml --resume 20260731-100211-ab12 \
-    --var requirement="..." \
     --var decisions="범위: 정산 이후 환불 제외. API: 기존 엔드포인트 확장"
+# 최초 실행의 requirement 는 <run-dir>/vars.json 에서 자동 복원됩니다
 
 [10:07:02] ⏩ analyst 캐시 재사용 (이전 실행 SUCCEEDED)
 [10:07:02] ⏩ 게이트 spec-gate 통과 (이전 실행에서 확인됨)
