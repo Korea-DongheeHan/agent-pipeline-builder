@@ -1,6 +1,6 @@
 ---
 name: build
-description: Meta-skill that builds a multi-agent development orchestration into a project. Use when composing a new agent team or graph pipeline, or when converting an existing orchestrator harness skill into a graph. Changes to an installed pipeline belong to agent-pipeline-builder:edit.
+description: Meta-skill that builds a multi-agent development orchestration into a project. Use when composing a new agent team, graph pipeline, or development harness, or when converting an existing orchestrator harness skill into a graph. Changes to an installed pipeline belong to agent-pipeline-builder:edit.
 ---
 
 # agent-pipeline-builder:build — compose a development orchestration
