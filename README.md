@@ -175,20 +175,28 @@ workflow:
   - analyst                          # analysis, SDD spec draft, questions to confirm
   - spec-gate                        # ⏸ pause → confirm spec via AskUserQuestion → resume
   - parallel: [implement, test]      # implementation ‖ test authoring (fan-out)
-  - qa:                              # fan-in: build, run, judge acceptance items
-      if: FAILED                     # convergence loop: rework only what failed
+  - build-check:                     # fan-in: a shell step, no agent session
+      if: FAILED                     # a broken build is an exit code, not a judgment
       goto: implement
       max: 2
       exhausted: escalate            # repeated failure → report, then fail the run
-  - review:                          # static review (approve → done; commits stay human)
-      if: FAILED
-      goto: implement
-      max: 2
-      exhausted: escalate
+  - parallel:                        # QA runs it, review reads it — neither waits
+      - qa:                          # build, run, judge acceptance items
+          if: FAILED                 # convergence loop: rework only what failed
+          goto: implement
+          max: 2
+          exhausted: escalate
+      - review:                      # static review (approve → done; commits stay human)
+          if: FAILED
+          goto: implement
+          max: 2
+          exhausted: escalate
 ```
 
 Each node runs with a project-specific agent definition from `.claude/agents/`,
-carrying your real build commands, test commands, and convention pointers.
+carrying your real build commands, test commands, and convention pointers. The
+`build-check` node is the exception: a shell command whose exit code is the
+verdict, so a broken build never costs an agent session.
 
 ## Graph engineering cookbook
 
@@ -312,6 +320,7 @@ parallel attempts.
 | State and resume | `.graph-runs/<run-id>/state.json`, `--resume` with cached successes |
 | Dry verification | `--validate`, `--dry-run`, `--mermaid`, `--mock` with scripted statuses and outputs |
 | Log language | `settings.lang: en \| ko` — localized runner logs and injected protocol; markers stay language-neutral |
+| Reaching further upstream | `context: [analyst]` — inject a node's output from more than one hop back. Gates are transparent and `exhausted:` targets get the loop's context automatically; `--validate` warns when a prompt names a node it cannot see |
 
 Agents report `GRAPH_STATUS: SUCCEEDED|FAILED` and optional
 `GRAPH_OUTPUT: {"key": "value"}` on their last lines; the runner injects the
@@ -319,15 +328,19 @@ protocol automatically and evaluates every conditional edge from it.
 
 ## Two execution modes
 
-| | Runner (default) | Session |
+| | Session (default) | Runner |
 |---|---|---|
-| Orchestrated by | `run_graph.py` script | Claude, via the Agent tool |
-| Guarantees | Deterministic, resumable, zero orchestration cost | Follows the same YAML, interpreted |
-| Observability | Console log + `run.log` + per-node output files | Live subagent tree in the Claude Code UI |
-| Best for | Unattended, large, or repeated runs | Watching, debugging, intervening |
+| Orchestrated by | Claude, via the Agent tool | `run_graph.py` script |
+| Guarantees | Follows the same YAML, interpreted | Deterministic, resumable, zero orchestration cost |
+| Observability | Live subagent tree in the Claude Code UI | Console log + `run.log` + per-node output files |
+| MCP tools | Inherited from the main session | Unreliable — each node is a headless `claude -p`, so servers may time out before their tools load and loaded tools may lack a granted permission |
+| Best for | Watching, debugging, intervening, and any pipeline whose nodes call MCP tools | Unattended, large, or repeated runs with no MCP |
 
-Set the default with `settings.mode` in `pipeline.yml`, and override it per run
-by simply asking ("run it in session mode").
+Session mode is the default because most pipelines touch an MCP-backed service
+somewhere. Switch with `settings.mode` in `pipeline.yml`, or per run by simply
+asking ("run it with the runner"). For runner mode with MCP, name the tools per
+node with `allowed_tools` and verify the grant with a bare `claude -p` call
+first.
 
 ## Operating notes
 

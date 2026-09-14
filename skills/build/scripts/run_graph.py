@@ -398,13 +398,15 @@ class PipelineError(Exception):
 
 
 DEFAULT_SETTINGS = {
-    "mode": "runner",  # runner | session — 기본 실행 모드 선언 (session 은 Claude 가 해석)
+    "mode": "session",  # session | runner — 기본 실행 모드 선언. session 은 Claude 가
+                        # Agent 툴로 해석 실행(관찰 가능, MCP 상속), runner 는 노드마다
+                        # headless claude -p (결정적, resume, 무인 — MCP 는 불안정)
     "lang": "en",  # en | ko — 실행 로그·프롬프트 주입 문구 언어
     "parallelism": 4,
     "state_dir": ".graph-runs",
     "node_timeout": 3600,
     "max_total_steps": 100,
-    "context_max_chars": 8000,
+    "context_max_chars": 40000,
     "claude_args": [],
     "model": None,
     "claude_bin": None,
@@ -805,6 +807,17 @@ class Pipeline:
             self.out_edges.setdefault(e["src"], []).append(e)
             self.in_edges.setdefault(e["dst"], []).append(e)
 
+        # on_exhausted 위임 노드는 in-edge 가 없다 — 루프 양 끝을 컨텍스트 출처로 기록한다.
+        # 기록하지 않으면 소진 보고 노드가 "무엇이 왜 실패했는지"를 구조적으로 볼 수 없다.
+        self.exhaust_preds = {}
+        for e in self.edges:
+            if not e["loop"] or e["loop"]["on_exhausted"] == "FAIL":
+                continue
+            tgt = self.exhaust_preds.setdefault(e["loop"]["on_exhausted"], [])
+            for n in (e["dst"], e["src"]):
+                if n not in tgt:
+                    tgt.append(n)
+
     # -- 프롬프트 경로: 실행 위치(cwd) 기준, 없으면 yml 위치 기준 폴백 --
     def resolve_prompt(self, rel):
         p = Path(rel)
@@ -814,6 +827,45 @@ class Pipeline:
         if alt.is_file():
             return alt
         return None
+
+    # -- 프롬프트에 주입할 선행 노드 --
+    def context_preds(self, nid, _seen=None):
+        """노드 nid 의 프롬프트에 출력을 주입할 선행 노드 id 목록.
+
+        직속 업스트림을 그대로 쓰되 두 경우를 보정한다.
+
+        - gate 노드는 산출물이 없다. 그 게이트의 선행으로 투과시킨다. 보정하지
+          않으면 게이트 하나가 downstream 의 컨텍스트를 통째로 지운다.
+        - type: command 노드의 출력은 빌드 로그다. 자기 출력을 더하되 선행도 함께
+          투과시킨다. 체인 중간에 셸 단계를 끼우는 것만으로 위쪽 산출물이 사라지면
+          안 된다.
+        - on_exhausted 위임 노드는 in-edge 가 없다. 루프 양 끝과 그 선행을 넘긴다.
+        """
+        top = _seen is None
+        if _seen is None:
+            _seen = {nid}
+        out = []
+        for e in self.in_edges.get(nid, []):
+            src = e["src"]
+            if src == START or src in _seen:
+                continue
+            _seen.add(src)
+            nsrc = self.nodes.get(src, {})
+            if nsrc.get("gate"):
+                chain = self.context_preds(src, _seen)          # 게이트는 자기 출력이 없다
+            elif nsrc.get("type") == "command":
+                chain = self.context_preds(src, _seen) + [src]  # 셸 단계는 더하기만 한다
+            else:
+                chain = [src]
+            for pr in chain:
+                if pr not in out:
+                    out.append(pr)
+        if top:
+            for src in self.exhaust_preds.get(nid, []):
+                for p in self.context_preds(src, set(_seen)) + [src]:
+                    if p != nid and p not in out:
+                        out.append(p)
+        return out
 
     def validate(self):
         errors, warnings = [], []
@@ -914,6 +966,28 @@ class Pipeline:
                 "cycle without loop config: %s — attach loop: {max: N} to feedback edges"
                 % ", ".join(sorted(stuck))
             )
+
+        # 프롬프트-그래프 정합성: 프롬프트가 백틱으로 가리킨 노드의 출력이 실제로
+        # 도달하지 않으면 경고한다 — flow(yml)와 task input(prompts)의 어긋남은
+        # 실행해 봐야만 드러나던 종류의 결함이다
+        for nid, nd in self.nodes.items():
+            if nd["gate"] or nd["type"] != "agent" or not nd["prompt"]:
+                continue
+            path = self.resolve_prompt(nd["prompt"])
+            if path is None:
+                continue
+            try:
+                text = path.read_text(encoding="utf-8")
+            except OSError:
+                continue
+            reachable = set(self.context_preds(nid)) | set(nd["context"]) | {nid}
+            for other in sorted(self.nodes):
+                if other in reachable or ("`%s`" % other) not in text:
+                    continue
+                warnings.append(
+                    "node %s: prompt mentions `%s` but that output never reaches it"
+                    " — add context: [%s] to node %s" % (nid, other, other, nid)
+                )
         return errors, warnings
 
 
@@ -1400,10 +1474,7 @@ class Runner:
         if nd["append_prompt"]:
             parts.append(str(nd["append_prompt"]))
 
-        preds = []
-        for e in self.pipe.in_edges.get(nd["id"], []):
-            if e["src"] != START and e["src"] not in preds:
-                preds.append(e["src"])
+        preds = list(self.pipe.context_preds(nd["id"]))
         for c in nd["context"]:
             if c not in preds:
                 preds.append(c)

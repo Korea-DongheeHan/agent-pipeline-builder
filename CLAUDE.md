@@ -28,6 +28,13 @@ repo IS the plugin — every file under `skills/` ships to users.
   `branch`, `gate: true`, `type: command`) compiles to edges; the engine only
   knows nodes/edges. Feedback cycles exist only on edges carrying `loop`
   (validated). Fan-in uses sticky arrivals plus wait-while-upstream-busy.
+- Prompt context injection uses **context predecessors**, not raw in-edges:
+  a `gate: true` node is transparent (its own predecessors pass through), a
+  `type: command` node is additive (its output plus its predecessors), and
+  a node reached only via `exhausted:` gets both ends of the loop plus their
+  predecessors. Anything further back needs `context:`. `--validate` warns
+  when a prompt backticks a node whose output never reaches it — those
+  warnings are defects.
 - Agents report `GRAPH_STATUS: SUCCEEDED|FAILED` and optional
   `GRAPH_OUTPUT: {json}`; the runner injects this protocol into prompts and
   evaluates all conditions from it. OUTPUT comparisons are raw string
@@ -46,6 +53,7 @@ repo IS the plugin — every file under `skills/` ships to users.
 - After any change to the runner, templates, or DSL, run the regression
   before finishing:
   ```bash
+  python3 tests/context_preds_check.py
   python3 skills/build/scripts/run_graph.py skills/build/templates/pipeline-dev/pipeline.yml --validate
   python3 skills/build/scripts/run_graph.py skills/build/templates/pipeline-dev/pipeline.yml --mock --var requirement=t   # expect exit 3 (gate)
   claude plugin validate .

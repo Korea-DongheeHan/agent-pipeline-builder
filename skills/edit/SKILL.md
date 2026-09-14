@@ -28,6 +28,8 @@ keep it as the before-state.
 | Add or change a branch | Status checks via node-attached `{if, goto}`; multi-case via `branch:` — define every case (an unmatched case deadlocks) and check the merge point's `join: any` |
 | Parallelize | Wrap sequential nodes in `parallel: [...]` and move the interface-freezing duty into the upstream node's prompt |
 | Change pass/fail criteria | The verdict section of `prompts/<node>.md`, plus any edge conditions using its GRAPH_OUTPUT keys |
+| A prompt reads a node it cannot see | Add that node to the reader's `context:`. `--validate` names the node and the reader. Gates and `exhausted:` targets need no declaration — the runner passes those through itself |
+| An MCP-calling node fails only in runner mode | Set `settings.mode: session`, or give the node `allowed_tools: "mcp__<server>__*"` and verify the grant with a bare `claude -p` call |
 | Change an agent | `.claude/agents/<name>.md` (model, tools, role) — keep `name` matching the yml `agent:` value |
 | Diagnose a failure | `.graph-runs/<run-id>/state.json` for the failed node and reason → the full text in `outputs/<node>.iterN.md` → decide whether the cause is the prompt, the agent, or the flow |
 
@@ -35,7 +37,7 @@ keep it as the before-state.
 
 ```bash
 PL=.claude/skills/<pipeline-name>
-python3 $PL/scripts/run_graph.py $PL/pipeline.yml --validate
+python3 $PL/scripts/run_graph.py $PL/pipeline.yml --validate   # every warning: line is a defect
 python3 $PL/scripts/run_graph.py $PL/pipeline.yml --mermaid    # show the new structure to the user
 # Drive the changed path through a mock (prove the branch/loop actually takes it):
 python3 $PL/scripts/run_graph.py $PL/pipeline.yml --mock --mock-status <node>=FAILED,SUCCEEDED

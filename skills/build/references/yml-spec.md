@@ -94,12 +94,12 @@ Block semantics:
 | Key | Default | Description |
 |---|---|---|
 | `lang` | `en` | Language of runner logs and injected prompt protocol (`en` \| `ko`). Status markers and exit codes are language-neutral |
-| `mode` | `runner` | Declared default execution mode. `runner` = run_graph.py (deterministic, resume); `session` = Claude interprets the same YAML with the Agent tool (observable). The output SKILL.md follows this value; users can override per run |
+| `mode` | `session` | Declared default execution mode. `session` = Claude interprets the YAML with the Agent tool (observable, inherits MCP); `runner` = run_graph.py (deterministic, resumable, unattended, but MCP is unreliable — see "Runner mode and MCP"). The output SKILL.md follows this value; users can override per run |
 | `parallelism` | 4 | Maximum concurrently running nodes |
 | `state_dir` | `.graph-runs` | Where run state and artifacts are stored |
 | `node_timeout` | 3600 | Per-execution limit for a node (seconds) |
 | `max_total_steps` | 100 | Cap on total node activations (runaway guard) |
-| `context_max_chars` | 8000 | Per-node cap when injecting upstream output into a prompt |
+| `context_max_chars` | 40000 | Per-node cap when injecting upstream output into a prompt. Truncated content keeps the full output file path — tell the prompt to read that file |
 | `claude_args` | `[]` | Extra claude CLI args for every node, e.g. `["--permission-mode", "acceptEdits"]` |
 | `model` | (none) | Default model for nodes **without** `agent:`. An agent node keeps its agent definition's model; only a node-level `model` overrides that |
 | `claude_bin` | `claude` | Path to the claude binary (env `CLAUDE_BIN` also works) |
@@ -131,11 +131,14 @@ nodes:
                                # .claude/agents/<name> definition (model, tools, system prompt)
     join: all                  # all (default) | any — fan-in policy (the workflow DSL sets this automatically)
     retry: 1                   # optional immediate retries on FAILED (default 0)
-    allowed_tools: "Read Bash" # optional; passed as --allowedTools
+    allowed_tools: "Read Bash" # optional; passed as --allowedTools. Required for MCP
+                               # tools in runner mode — see "Runner mode and MCP" below
     persist: true              # optional; session mode only — keep the subagent alive
                                # across loop iterations and send feedback via SendMessage
                                # instead of respawning. Runner mode ignores it
-    context: [architect]       # optional; inject these nodes' outputs even if not direct upstream
+    context: [architect]       # optional; inject these nodes' outputs even if not direct
+                               # upstream. Needed whenever the prompt reads a node that sits
+                               # further back than one hop — --validate warns when it is missing
     append_prompt: |           # optional inline instructions appended after the prompt file
       extra instructions...
 ```
@@ -223,16 +226,61 @@ carry only the **pass/fail criteria** and the **GRAPH_OUTPUT key contract**.
 
 ## Context injection
 
-When a node runs, the latest outputs of its direct upstream nodes (plus any
-nodes listed in `context`) are injected as an "upstream outputs" section.
-Content beyond `context_max_chars` is truncated, with the full output file
-path provided alongside.
+When a node runs, the latest outputs of its **context predecessors** are
+injected as an "upstream outputs" section. Content beyond
+`context_max_chars` is truncated, with the full output file path provided
+alongside — state in the prompt that the node reads that file when the
+section is truncated.
+
+Context predecessors are the direct upstream nodes, with two corrections:
+
+- A `gate: true` node produces no output, so it is transparent: the gate's
+  own predecessors pass through to the node below it. Without this, one gate
+  erases the whole upstream from everything downstream of it.
+- A `type: command` node's own output is a build log. It is additive: the
+  node's output is injected **and** its own predecessors pass through, so
+  dropping a shell step into a chain never hides the work above it.
+- A node reached only through `exhausted:` has no inbound edge. It receives
+  both ends of the exhausted loop plus their predecessors, so an escalation
+  report can name what failed and why.
+
+Anything further back is not injected. Declare it in `context:`.
+
+`--validate` reads every prompt file and warns when the prompt names another
+node in backticks (`` `analyst` ``) whose output never reaches it. That
+warning is the flow/prompt mismatch: fix it by adding the node to `context:`,
+not by rewording the prompt.
+
+## Runner mode and MCP
+
+Runner mode starts each node as a headless `claude -p` session. MCP servers
+do **not** carry over the way they do in an interactive session: a server can
+time out before its tools load, and a loaded tool can be refused for lack of
+a granted permission. A node that writes to Jira, Confluence, or a similar
+MCP-backed service fails there while working fine in session mode.
+
+For a pipeline with MCP-dependent nodes, set `settings.mode: session` and say
+so in the generated SKILL.md. When runner mode is required anyway, name the
+tools per node:
+
+```yaml
+  - id: analyst
+    allowed_tools: "mcp__<server>__*"
+```
+
+Verify the grant before wiring it in — each node session reconnects MCP from
+scratch:
+
+```bash
+claude -p --allowedTools "mcp__<server>__*" "call one tool and report the result or the exact error"
+```
 
 ## CLI
 
 ```
 python3 scripts/run_graph.py pipeline.yml            # run
-  --validate                                         # checks only (schema, reachability, cycles)
+  --validate                                         # checks only (schema, reachability, cycles,
+                                                     #   prompt/graph mismatch warnings)
   --dry-run                                          # parallel-wave execution plan
   --mermaid                                          # mermaid diagram
   --mock                                             # simulated run without claude calls

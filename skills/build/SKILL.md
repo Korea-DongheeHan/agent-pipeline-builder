@@ -96,7 +96,8 @@ Copy `templates/pipeline-dev/` in full **except its `agents/` directory**
 (that was consumed by Phase 3 and must not land inside the skill), then:
 
 1. Substitute the placeholders (`{{pipeline_name}}`, `{{prefix}}`,
-   `{{project_name}}`) in `SKILL.md`, `pipeline.yml`, and `prompts/*.md`, and
+   `{{project_name}}`, `{{build_command}}`) in `SKILL.md`, `pipeline.yml`, and
+   `prompts/*.md`, and
    set `settings.lang` in pipeline.yml to the language chosen in Phase 2.
    When the output language is not English, translate the template bodies
    (SKILL.md, prompts, agent definitions — the templates are the English
@@ -104,10 +105,27 @@ Copy `templates/pipeline-dev/` in full **except its `agents/` directory**
    The output SKILL.md description must include **concrete trigger situations
    plus follow-up keywords (rerun, revise, refine, apply feedback)** — adapt
    the template default to the project's vocabulary.
-2. If the Phase 2 design differs from the default template, adjust workflow,
+1-1. `{{build_command}}` is the `build-check` node's shell command — the
+   project's cheapest command that fails on a broken build (`./gradlew
+   compileKotlin compileTestKotlin`, `npm run build`, `cargo check`). When the
+   project has no such command, delete the `build-check` node and its workflow
+   step instead of inventing one; `--validate` catches a dangling step.
+2. Set `settings.mode`. `session` is the default and stays the default
+   whenever any node calls MCP tools (Jira, Confluence, GitLab, a wiki):
+   runner mode starts each node as a headless `claude -p` session where MCP
+   servers may fail to load (`references/yml-spec.md`, "Runner mode and
+   MCP"). Choose `runner` only for a pipeline that runs unattended and calls
+   no MCP tool. State the chosen default and the reason in the output
+   SKILL.md; for runner mode with MCP, set `allowed_tools` per node and
+   verify the grant first.
+3. Wire the context the prompts assume. A prompt that reads an output more
+   than one hop upstream needs that node in the reader's `context:` — the
+   template does this for `qa` and `review`. Gates and `exhausted:` targets
+   need no declaration; the runner corrects those two itself.
+4. If the Phase 2 design differs from the default template, adjust workflow,
    nodes, and prompts (DSL spec: `references/yml-spec.md`; prompt rules:
    `references/prompt-guide.md`).
-3. Copy this skill's `scripts/run_graph.py` and
+5. Copy this skill's `scripts/run_graph.py` and
    `references/session-mode.md` verbatim (never modify the runner — it
    guarantees standalone execution).
 
@@ -137,6 +155,14 @@ python3 $PL/scripts/run_graph.py $PL/pipeline.yml --mock \
 grep -rn "{{" $PL .claude/agents/<prefix>-*.md | grep -v "{{vars\.\|{{run\.\|{{node\."
 ```
 
+Every `warning:` line `--validate` prints is a defect, not a note. A
+`prompt mentions X but that output never reaches it` warning means the prompt
+asks for something the graph cannot deliver — add `X` to that node's
+`context:` and validate again. Hand over only with zero warnings.
+
+Read one `.graph-runs/<run-id>/prompts/*.prompt.md` from the mock run and
+confirm the `upstream node outputs` section holds what the prompt asks for.
+
 **Trigger validation** — reason through the output SKILL.md description:
 
 - 5 should-trigger phrases: real development requests this project would see
@@ -151,8 +177,8 @@ Include in the handover report: the generated file tree, the CLAUDE.md
 registration, the **cost profile** (one node execution = one claude session;
 estimate the maximum session count), the two execution modes (runner =
 deterministic + resume / session = live subagent view), the context-isolation
-property, the permission-mode setting, and that future changes go through
-`agent-pipeline-builder:edit`.
+property, the permission-mode setting, the MCP limitation of runner mode when
+it applies, and that future changes go through `agent-pipeline-builder:edit`.
 
 ## References
 

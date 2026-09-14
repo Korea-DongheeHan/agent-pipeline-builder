@@ -7,13 +7,14 @@ pipeline.yml remains the single source of truth.
 
 ## Choosing a mode
 
-| | Runner mode | Session mode |
+| | Session mode (default) | Runner mode |
 |---|---|---|
-| Execution guarantee | Deterministic, enforced by the script | Depends on the model following these rules |
-| Observability | Console log + state.json | **Live tree view** |
-| Resume | Cached reuse of succeeded nodes | None |
-| Context | Nodes fully isolated; main session untouched | Node summaries accumulate in the main session |
-| Best for | Unattended, batch, large runs | Interactive runs that need watching |
+| Execution guarantee | Depends on the model following these rules | Deterministic, enforced by the script |
+| Observability | **Live tree view** | Console log + state.json |
+| Resume | None | Cached reuse of succeeded nodes |
+| Context | Node summaries accumulate in the main session | Nodes fully isolated; main session untouched |
+| MCP tools | Inherited from the main session | Unreliable — each node is a headless `claude -p` session, so servers may time out before their tools load and loaded tools may lack a granted permission |
+| Best for | Interactive runs that need watching, and any pipeline whose nodes call MCP tools | Unattended, batch, large runs with no MCP |
 
 ## Interpretation rules (Claude MUST follow)
 
@@ -21,8 +22,14 @@ pipeline.yml remains the single source of truth.
    for the wave order, branches, and loops. Never reinterpret the graph.
 2. **One node execution = one Agent tool call.** Compose the prompt from:
    - the prompt file content (substitute `{{vars.*}}` with real values)
-   - upstream results: a summary plus the output file path (never inline the
-     full text — bounded handoff)
+   - context predecessors' results: a summary plus the output file path
+     (never inline the full text — bounded handoff). Context predecessors are
+     the direct upstream nodes, with two corrections the runner also applies:
+     a `gate: true` node has no output, so pass its own predecessors through
+     instead; a `type: command` node is additive, so pass its output *and* its
+     predecessors; a node reached only via `exhausted:` has no inbound edge, so
+     give it both ends of the exhausted loop plus their predecessors. Add
+     every node listed in the node's `context:` key
    - the status instruction: "when done, end with `GRAPH_STATUS: SUCCEEDED`
      or `FAILED` on the last line, and `GRAPH_OUTPUT: {json}` right above it
      if routing values are needed"

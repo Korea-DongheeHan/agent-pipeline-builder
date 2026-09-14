@@ -174,20 +174,28 @@ workflow:
   - analyst                          # 분석, SDD 스펙 초안, 확정 질문 도출
   - spec-gate                        # ⏸ 일시정지 후 AskUserQuestion 으로 스펙 확정
   - parallel: [implement, test]      # 구현과 테스트 작성을 병렬로 (팬아웃)
-  - qa:                              # 팬인. 빌드와 실행으로 acceptance 판정
-      if: FAILED                     # 수렴 루프. 실패한 것만 재작업
+  - build-check:                     # 팬인. 에이전트 세션 없는 셸 단계
+      if: FAILED                     # 빌드 깨짐은 판단이 아니라 exit code 다
       goto: implement
       max: 2
       exhausted: escalate            # 반복 실패는 보고 후 실행을 실패로 종결
-  - review:                          # 정적 리뷰. 승인이면 종료, 커밋은 사람이
-      if: FAILED
-      goto: implement
-      max: 2
-      exhausted: escalate
+  - parallel:                        # QA 는 돌리고 리뷰는 읽는다. 서로 기다리지 않는다
+      - qa:                          # 빌드와 실행으로 acceptance 판정
+          if: FAILED                 # 수렴 루프. 실패한 것만 재작업
+          goto: implement
+          max: 2
+          exhausted: escalate
+      - review:                      # 정적 리뷰. 승인이면 종료, 커밋은 사람이
+          if: FAILED
+          goto: implement
+          max: 2
+          exhausted: escalate
 ```
 
 각 노드는 `.claude/agents/` 의 프로젝트 전용 에이전트 정의로 실행되며, 실제
-빌드 명령과 테스트 명령, 컨벤션 포인터를 갖고 움직입니다.
+빌드 명령과 테스트 명령, 컨벤션 포인터를 갖고 움직입니다. `build-check` 만
+예외로, exit code 가 판정인 셸 명령이라 빌드가 깨져도 에이전트 세션을 쓰지
+않습니다.
 
 ## 그래프 엔지니어링 쿡북
 
@@ -307,6 +315,7 @@ workflow:
 | 상태와 재개 | `.graph-runs/<run-id>/state.json`, 성공 노드를 캐시하는 `--resume` |
 | 사전 검증 | `--validate`, `--dry-run`, `--mermaid`, 상태·출력 대본을 주는 `--mock` |
 | 로그 언어 | `settings.lang: en \| ko`. 로그와 주입 프로토콜이 현지화되며 마커는 언어 중립 |
+| 한 홉 너머의 선행 출력 | `context: [analyst]` 로 직속이 아닌 노드의 출력을 주입. 게이트는 투과하고 `exhausted:` 대상은 루프 컨텍스트를 자동으로 받으며, 프롬프트가 닿지 않는 노드를 가리키면 `--validate` 가 경고 |
 
 에이전트는 마지막 줄에 `GRAPH_STATUS: SUCCEEDED|FAILED` 를, 필요하면
 `GRAPH_OUTPUT: {"key": "value"}` 를 보고합니다. 러너가 이 프로토콜을
@@ -314,15 +323,18 @@ workflow:
 
 ## 두 가지 실행 모드
 
-| | 러너 (기본) | 세션 |
+| | 세션 (기본) | 러너 |
 |---|---|---|
-| 오케스트레이터 | `run_graph.py` 스크립트 | Agent 툴을 쓰는 Claude |
-| 보장 | 결정적이고 재개 가능하며 오케스트레이션 비용 없음 | 같은 YAML 을 해석해 수행 |
-| 관찰 | 콘솔 로그, `run.log`, 노드별 출력 파일 | Claude Code UI 의 실시간 서브에이전트 트리 |
-| 적합 | 무인, 대규모, 반복 실행 | 관찰, 디버깅, 중간 개입 |
+| 오케스트레이터 | Agent 툴을 쓰는 Claude | `run_graph.py` 스크립트 |
+| 보장 | 같은 YAML 을 해석해 수행 | 결정적이고 재개 가능하며 오케스트레이션 비용 없음 |
+| 관찰 | Claude Code UI 의 실시간 서브에이전트 트리 | 콘솔 로그, `run.log`, 노드별 출력 파일 |
+| MCP 툴 | 메인 세션에서 그대로 상속 | 불안정. 노드마다 headless `claude -p` 라 서버가 툴을 올리기 전에 타임아웃하거나, 올라온 툴이 권한을 못 받을 수 있음 |
+| 적합 | 관찰, 디버깅, 중간 개입, 그리고 MCP 툴을 쓰는 모든 파이프라인 | MCP 를 쓰지 않는 무인, 대규모, 반복 실행 |
 
-기본값은 `pipeline.yml` 의 `settings.mode` 로 정하고, 실행할 때 "세션 모드로
-돌려 줘"라고 말하면 그때만 바뀝니다.
+대부분의 파이프라인이 어딘가에서 MCP 서비스를 건드리기 때문에 세션 모드가
+기본값입니다. `pipeline.yml` 의 `settings.mode` 로 바꾸거나, 실행할 때 "러너로
+돌려 줘"라고 말하면 그때만 바뀝니다. 러너로 MCP 를 써야 한다면 노드마다
+`allowed_tools` 로 툴을 지정하고, 맨 `claude -p` 호출로 권한부터 확인하세요.
 
 ## 운영 참고
 

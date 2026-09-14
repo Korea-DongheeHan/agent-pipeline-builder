@@ -161,20 +161,27 @@ workflow:
   - analyst                          # 分析、SDD 规格草案、待确认问题
   - spec-gate                        # ⏸ 暂停 → AskUserQuestion 确认规格 → 续跑
   - parallel: [implement, test]      # 实现 ‖ 测试编写（扇出）
-  - qa:                              # 扇入：构建、运行、判定验收项
-      if: FAILED                     # 收敛循环：只返工失败的部分
+  - build-check:                     # 扇入：无智能体会话的 shell 步骤
+      if: FAILED                     # 构建失败是退出码，不是判断
       goto: implement
       max: 2
       exhausted: escalate            # 反复失败 → 出报告，然后让运行失败
-  - review:                          # 静态评审（通过 → 结束；提交归人）
-      if: FAILED
-      goto: implement
-      max: 2
-      exhausted: escalate
+  - parallel:                        # QA 负责跑，评审负责读，互不等待
+      - qa:                          # 构建、运行、判定验收项
+          if: FAILED                 # 收敛循环：只返工失败的部分
+          goto: implement
+          max: 2
+          exhausted: escalate
+      - review:                      # 静态评审（通过 → 结束；提交归人）
+          if: FAILED
+          goto: implement
+          max: 2
+          exhausted: escalate
 ```
 
 每个节点都用 `.claude/agents/` 里的项目专属智能体定义运行，携带真实的
-构建命令、测试命令与约定指引。
+构建命令、测试命令与约定指引。唯一的例外是 `build-check`：它是一条以退出码
+为判定的 shell 命令，构建损坏时不会消耗任何智能体会话。
 
 ## 图工程手册
 
@@ -292,6 +299,7 @@ workflow:
 | 状态与续跑 | `.graph-runs/<run-id>/state.json`，`--resume` 复用成功节点缓存 |
 | 干跑验证 | `--validate`、`--dry-run`、`--mermaid`、可编排状态/输出脚本的 `--mock` |
 | 日志语言 | `settings.lang: en \| ko` — 运行日志与注入协议本地化；标记保持语言中立 |
+| 跨越一跳的上游输出 | `context: [analyst]` 注入非直接上游节点的输出。门控节点透明传递，`exhausted:` 目标自动获得循环上下文；提示词引用了触达不到的节点时 `--validate` 会告警 |
 
 智能体在最后一行上报 `GRAPH_STATUS: SUCCEEDED|FAILED`，路由值通过
 `GRAPH_OUTPUT: {"key": "value"}` 传递（协议由运行器自动注入）。运行器仅依赖
@@ -299,15 +307,18 @@ Python 3 标准库（有 PyYAML 就用，没有则回退到内置解析器）。
 
 ## 两种执行模式
 
-| | Runner（默认） | Session |
+| | Session（默认） | Runner |
 |---|---|---|
-| 编排者 | `run_graph.py` 脚本 | 通过 Agent 工具的 Claude |
-| 保证 | 确定性、可续跑、零编排成本 | 解释执行同一份 YAML |
-| 可观测性 | 控制台日志 + `run.log` + 各节点输出文件 | Claude Code UI 的实时子智能体树 |
-| 适用 | 无人值守、大型或重复运行 | 观察、调试、干预 |
+| 编排者 | 通过 Agent 工具的 Claude | `run_graph.py` 脚本 |
+| 保证 | 解释执行同一份 YAML | 确定性、可续跑、零编排成本 |
+| 可观测性 | Claude Code UI 的实时子智能体树 | 控制台日志 + `run.log` + 各节点输出文件 |
+| MCP 工具 | 从主会话继承 | 不可靠 — 每个节点都是无头 `claude -p`，服务器可能在工具加载前超时，已加载的工具也可能缺少授权 |
+| 适用 | 观察、调试、干预，以及任何调用 MCP 工具的流水线 | 不涉及 MCP 的无人值守、大型或重复运行 |
 
-默认值由 `pipeline.yml` 的 `settings.mode` 决定，单次运行时开口即可覆盖
-（“用会话模式跑”）。
+因为大多数流水线都会在某处触及 MCP 服务，所以会话模式是默认值。可在
+`pipeline.yml` 的 `settings.mode` 中切换，或在单次运行时开口覆盖（“用 Runner
+跑”）。若要在 Runner 模式下使用 MCP，请为每个节点用 `allowed_tools` 指明工具，
+并先用一次裸 `claude -p` 调用验证授权。
 
 ## 运行模型 — 发布前必须了解
 

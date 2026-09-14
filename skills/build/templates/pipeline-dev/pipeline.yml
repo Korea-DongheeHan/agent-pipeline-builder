@@ -1,8 +1,12 @@
 # {{project_name}} development orchestration pipeline
 #
-# Flow: analysis → [spec gate ⏸] → (implement ‖ test authoring) → QA (fan-in) → review
-#       QA/review failure → implementation rework convergence loop (max 2)
-#       → escalation report on exhaustion
+# Flow: analysis → [spec gate ⏸] → (implement ‖ test authoring) → build check
+#       → (QA ‖ review) → escalation report when the loop is exhausted
+#       build/QA/review failure → implementation rework convergence loop (max 2)
+#
+# The build check is a shell step, not an agent: a broken build is decided by an
+# exit code, so it must not cost an agent session. QA and review run together —
+# QA runs the build, review reads the diff, and neither waits on the other.
 #
 # Spec gate (SDD): once the analyst produces the spec draft and the questions
 # to confirm, the pipeline pauses (exit 3). The orchestrator (Claude) confirms
@@ -63,23 +67,38 @@ nodes:
     agent: "{{prefix}}-qa"
     prompt: prompts/qa.md
     model: sonnet
+    context: [analyst]                 # 직속 업스트림은 implement·test 뿐이다. 인수 기준
+                                       # 원본을 판정 노드에 넣으려면 context 로 끌어온다.
+                                       # 프롬프트가 `노드id` 를 언급하는데 이 선언이 빠지면
+                                       # --validate 가 경고한다
   - id: review
     agent: "{{prefix}}-reviewer"
     prompt: prompts/review.md
+    context: [analyst]                 # 변경 의도와 인수 기준 원본
+  - id: build-check
+    type: command                      # no agent session — the exit code is the verdict
+    run: "{{build_command}}"           # the project's cheapest whole-build command
+    timeout: 900
   - id: escalate
     prompt: prompts/escalate.md        # no dedicated agent — report authoring only
 
 workflow:
   - analyst
   - spec-gate                          # ⏸ no implementation before the spec is confirmed
-  - parallel: [implement, test]        # fan-out — fan-in at qa
-  - qa:
-      if: FAILED                       # acceptance FAIL → implementation rework
+  - parallel: [implement, test]        # fan-out — fan-in at build-check
+  - build-check:
+      if: FAILED                       # broken build → rework before any agent judges it
       goto: implement
       max: 2
       exhausted: escalate              # exhaustion → report node runs, then auto-fail
-  - review:
-      if: FAILED                       # REQUEST_CHANGES → rework
-      goto: implement
-      max: 2
-      exhausted: escalate
+  - parallel:                          # QA runs it, review reads it — no dependency between them
+      - qa:
+          if: FAILED                   # acceptance FAIL → implementation rework
+          goto: implement
+          max: 2
+          exhausted: escalate
+      - review:
+          if: FAILED                   # REQUEST_CHANGES → rework
+          goto: implement
+          max: 2
+          exhausted: escalate

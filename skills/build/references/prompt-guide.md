@@ -21,7 +21,8 @@ prompt instead.)
 ## Work
 1. ...concrete steps...
    (Upstream outputs are auto-injected as context below — state which
-    node's artifact is used and how.)
+    node's artifact is used and how. Add one line telling the node to read
+    the full output file named beside a section that arrives truncated.)
 
 ## Deliverable
 What must appear in the response body.
@@ -73,4 +74,32 @@ Mapping when converting an orchestrator-style harness skill:
 - Interactive gates (spec confirmation via AskUserQuestion) → `gate: true`
   nodes (pause → confirm → `--resume` + `--var` injection; see
   templates/pipeline-dev).
+- Deterministic checkpoints (a compile gate, a lint run, a workspace script) →
+  `type: command` nodes. A harness that says "QA isolates the build failure
+  and hands it back" becomes a command node with `{if: FAILED, goto: <builder>}`
+  — the exit code is the verdict, so no agent session is spent on it.
+- Phases the harness runs concurrently because they do not depend on each
+  other (a reviewer reading the diff while QA runs the build) → one `parallel`
+  block, with `{if, goto}` attached to each member that can send work back.
+- Request-type routing ("review only", "tests only", a fast path for thin
+  changes) → `branch:` on a key the classifying node reports in GRAPH_OUTPUT.
+  Every case must be declared; an unmatched case deadlocks.
 - Commits and merges stay out of the graph (manual, after END).
+
+What does **not** convert, and must be said out loud when reporting the
+conversion:
+
+- **A live agent team.** Peers messaging each other mid-phase, a shared task
+  list with dependencies, incremental feedback while a teammate is still
+  working. The graph moves work on edges: a node produces, finishes, and hands
+  a file forward. Approximate it by splitting the phase into per-layer nodes
+  with a command-node check between them, which converts "tell me the moment
+  the build breaks" into an edge. `persist: true` keeps the builder's subagent
+  alive across loop iterations in session mode and recovers part of the rest.
+- **Runtime-shaped work.** A task DAG built from what the analysis found, a
+  reviewer fanned out into N dimensions only when the diff is large. Node
+  counts are fixed in the yml. Declare the widest useful shape, or branch
+  between two declared shapes.
+- **Promotion mid-run** (a fast path that turns out to need the full team)
+  works only as a declared edge: the node reports the condition in
+  GRAPH_OUTPUT and a branch routes back.
